@@ -49,11 +49,20 @@
           <label>방 크기와 모양<select id="pfSize"></select></label>
           <label>천장 높이<select id="pfHeight"></select></label>
           <label>가벽 (작품을 더 걸 수 있는 칸막이)<select id="pfPart"></select></label>
-          <label>벽 마감<select id="pfFinish"></select></label>
-          <label>바닥 재질<select id="pfFloorSel"></select></label>
+          <label>벽 무늬 (모든 벽 기본값)<select id="pfFinish"></select></label>
+          <label>바닥 재질과 무늬<select id="pfFloorSel"></select></label>
+          <label>바닥 색 입히기 (흰색이면 원래 색)<input type="color" id="pfFloorTint"></label>
           <label>천장<select id="pfCeil"></select></label>
         </div>
-        <fieldset><legend>벽마다 색 따로 정하기</legend><div class="pfWalls" id="pfWallColors"></div></fieldset>
+        <fieldset><legend>벽마다 색과 무늬 따로 정하기</legend><div class="pfWalls" id="pfWallColors"></div></fieldset>
+        <fieldset><legend>조명</legend><div class="pfForm grid2">
+          <label>조명 색<select id="pfLightMood"></select></label>
+          <label>직접 고른 조명 색<input type="color" id="pfLightColor"></label>
+          <label>방 전체 밝기 <output id="pfBrightOut"></output><input type="range" id="pfBright" min="0.2" max="1.8" step="0.05"></label>
+          <label>작품 조명 세기 <output id="pfSpotOut"></output><input type="range" id="pfSpotK" min="0" max="2.5" step="0.05"></label>
+          <label>작품 조명 색<input type="color" id="pfSpotColor"></label>
+          <label class="pfCheck"><input type="checkbox" id="pfStrips"> 천장 줄조명 켜기</label>
+        </div><p class="pfNote">전등을 원하는 곳에 달거나 옮기려면 내 갤러리에서 「전시 편집 → 전등 달기」를 쓰세요.</p></fieldset>
         <div class="actions"><button class="btn primary" type="submit">저장하고 내 갤러리로 가기</button><button class="btn" type="button" id="pfLogout">로그아웃</button></div>
       </form>
       <div class="pfGuest" id="pfGuestBox" hidden>
@@ -155,11 +164,11 @@
 
   /* ---------------- studio ---------------- */
   const PRESETS = [
-    { name: '밝은 화이트큐브', L: { finish: 'paint', floor: 'stone', ceiling: 'white', walls: { n: '#f4f2ee', e: '#f4f2ee', s: '#f4f2ee', w: '#f4f2ee', p: '#f4f2ee' } } },
-    { name: '따뜻한 한지방', L: { finish: 'hanji', floor: 'wood', ceiling: 'wood', walls: { n: '#eee4cf', e: '#eee4cf', s: '#eee4cf', w: '#eee4cf', p: '#e3d2b4' } } },
-    { name: '어두운 극장', L: { finish: 'paint', floor: 'dark', ceiling: 'dark', walls: { n: '#2f2c29', e: '#2f2c29', s: '#2f2c29', w: '#2f2c29', p: '#5b2e2a' } } },
-    { name: '노출 콘크리트', L: { finish: 'concrete', floor: 'concrete', ceiling: 'dark', walls: { n: '#d9d7d3', e: '#d9d7d3', s: '#d9d7d3', w: '#d9d7d3', p: '#e8e4dc' } } },
-    { name: '고전 미술관', L: { finish: 'plaster', floor: 'carpet', ceiling: 'white', walls: { n: '#2f3b35', e: '#2f3b35', s: '#2f3b35', w: '#2f3b35', p: '#e7d9d0' } } },
+    { name: '밝은 화이트큐브', L: { mood: 'neutral', bright: 1.2, finish: 'paint', floor: 'stone', ceiling: 'white', walls: { n: '#f4f2ee', e: '#f4f2ee', s: '#f4f2ee', w: '#f4f2ee', p: '#f4f2ee' } } },
+    { name: '따뜻한 한지방', L: { mood: 'warm', bright: 1, finish: 'hanji', floor: 'wood', ceiling: 'wood', walls: { n: '#eee4cf', e: '#eee4cf', s: '#eee4cf', w: '#eee4cf', p: '#e3d2b4' } } },
+    { name: '어두운 극장', L: { mood: 'warm', bright: .45, finish: 'paint', floor: 'dark', ceiling: 'dark', walls: { n: '#2f2c29', e: '#2f2c29', s: '#2f2c29', w: '#2f2c29', p: '#5b2e2a' } } },
+    { name: '노출 콘크리트', L: { mood: 'cool', bright: 1, finish: 'concrete', floor: 'concrete', ceiling: 'dark', walls: { n: '#d9d7d3', e: '#d9d7d3', s: '#d9d7d3', w: '#d9d7d3', p: '#e8e4dc' } } },
+    { name: '고전 미술관', L: { mood: 'warm', bright: .8, finish: 'wainscot', floor: 'herring', ceiling: 'white', walls: { n: '#2f3b35', e: '#2f3b35', s: '#2f3b35', w: '#2f3b35', p: '#e7d9d0' } } },
   ];
   let tab = 'room';
   function openStudio(t) {
@@ -183,13 +192,25 @@
     fillSel('pfSize', SIZES, L.size); fillSel('pfHeight', HEIGHTS, L.height); fillSel('pfPart', PARTS, L.partition);
     fillSel('pfFinish', FINISHES, L.finish); fillSel('pfFloorSel', FLOORS, L.floor); fillSel('pfCeil', CEILS, L.ceiling);
     const wc = $('pfWallColors'); wc.innerHTML = '';
-    Object.entries(Object.assign({}, WALL_IDS, { p: '가벽' })).forEach(([k, label]) => { const l = document.createElement('label'); l.innerHTML = `${esc(label.replace(/ 벽$/, ''))}<input type="color" data-wall="${k}" value="${L.walls[k]}">`; wc.appendChild(l); });
+    const finOpts = '<option value="">무늬: 기본값</option>' + Object.keys(FINISHES).map(k => `<option value="${k}">${esc(FINISHES[k])}</option>`).join('');
+    Object.entries(Object.assign({}, WALL_IDS, { p: '가벽' })).forEach(([k, label]) => { const l = document.createElement('label'); l.innerHTML = `${esc(label.replace(/ 벽$/, ''))}<input type="color" data-wall="${k}" value="${L.walls[k]}"><select data-wfin="${k}" aria-label="${esc(label)} 무늬">${finOpts}</select>`; l.querySelector('select').value = L.wallFinish[k]; wc.appendChild(l); });
+    $('pfFloorTint').value = L.floorTint;
+    fillSel('pfLightMood', Object.fromEntries(Object.entries(MOODS).map(([k, v]) => [k, v[0]])), L.light.mood);
+    $('pfLightColor').value = L.light.mood === 'custom' ? L.light.color : MOODS[L.light.mood][1];
+    $('pfBright').value = L.light.bright; $('pfSpotK').value = L.light.spotK; $('pfSpotColor').value = L.light.spot; $('pfStrips').checked = L.light.strips;
+    const outs = () => { $('pfBrightOut').textContent = Math.round($('pfBright').value * 100) + '%'; $('pfSpotOut').textContent = Math.round($('pfSpotK').value * 100) + '%'; }; outs();
+    $('pfBright').oninput = $('pfSpotK').oninput = outs;
+    $('pfLightColor').oninput = () => { $('pfLightMood').value = 'custom'; };
+    $('pfLightMood').onchange = () => { const m = MOODS[$('pfLightMood').value]; if (m[1]) $('pfLightColor').value = m[1]; };
     const pr = $('pfPresets'); pr.innerHTML = '';
-    PRESETS.forEach(ps => { const b = document.createElement('button'); b.type = 'button'; b.textContent = ps.name; b.addEventListener('click', () => { $('pfFinish').value = ps.L.finish; $('pfFloorSel').value = ps.L.floor; $('pfCeil').value = ps.L.ceiling; wc.querySelectorAll('input[data-wall]').forEach(i => { i.value = ps.L.walls[i.dataset.wall]; }); G.toast(`「${ps.name}」 분위기로 골랐습니다. 저장하면 적용됩니다.`); }); pr.appendChild(b); });
+    PRESETS.forEach(ps => { const b = document.createElement('button'); b.type = 'button'; b.textContent = ps.name; b.addEventListener('click', () => { $('pfFinish').value = ps.L.finish; $('pfFloorSel').value = ps.L.floor; $('pfCeil').value = ps.L.ceiling; wc.querySelectorAll('input[data-wall]').forEach(i => { i.value = ps.L.walls[i.dataset.wall]; }); wc.querySelectorAll('select[data-wfin]').forEach(i => { i.value = ''; }); $('pfFloorTint').value = '#ffffff'; if (ps.L.mood) { $('pfLightMood').value = ps.L.mood; $('pfLightColor').value = MOODS[ps.L.mood][1]; } if (ps.L.bright) { $('pfBright').value = ps.L.bright; $('pfBright').oninput(); } G.toast(`「${ps.name}」 분위기로 골랐습니다. 저장하면 적용됩니다.`); }); pr.appendChild(b); });
   }
   function readLayout() {
     const walls = {}; $('pfWallColors').querySelectorAll('input[data-wall]').forEach(i => { walls[i.dataset.wall] = i.value; });
-    return { size: $('pfSize').value, height: Number($('pfHeight').value), partition: $('pfPart').value, finish: $('pfFinish').value, floor: $('pfFloorSel').value, ceiling: $('pfCeil').value, walls };
+    const wallFinish = {}; $('pfWallColors').querySelectorAll('select[data-wfin]').forEach(i => { wallFinish[i.dataset.wfin] = i.value; });
+    const old = layoutOf(profile);
+    return { size: $('pfSize').value, height: Number($('pfHeight').value), partition: $('pfPart').value, finish: $('pfFinish').value, floor: $('pfFloorSel').value, floorTint: $('pfFloorTint').value, ceiling: $('pfCeil').value, walls, wallFinish,
+      light: { mood: $('pfLightMood').value, color: $('pfLightColor').value, bright: Number($('pfBright').value), spotK: Number($('pfSpotK').value), spot: $('pfSpotColor').value, strips: $('pfStrips').checked }, lamps: old.lamps };
   }
   $('pfRoomForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -330,8 +351,9 @@
   const SIZES = { small: { w: 10, d: 10, label: '작은 방 (10×10m)' }, standard: { w: 16, d: 16, label: '기본 전시실 (16×16m)' }, hall: { w: 24, d: 18, label: '넓은 홀 (24×18m)' }, corridor: { w: 10, d: 28, label: '긴 회랑 (10×28m)' } };
   const HEIGHTS = { 3.6: '낮은 천장 3.6m', 5: '보통 5m', 7: '높은 천장 7m' };
   const PARTS = { none: '가벽 없음', center: '가운데 가벽 1개', two: '양쪽 가벽 2개', three: '가벽 3개 (지그재그)' };
-  const FLOORS = { wood: '원목', stone: '밝은 석재', dark: '어두운 마루', concrete: '콘크리트', carpet: '붉은 카펫' };
-  const FINISHES = { paint: '매끈한 페인트', plaster: '거친 회벽', hanji: '한지', concrete: '노출 콘크리트' };
+  const FLOORS = { wood: '원목', herring: '헤링본 원목', dark: '어두운 마루', stone: '밝은 석재', checker: '체크 대리석', terrazzo: '테라조', tile: '흰 타일', concrete: '콘크리트', carpet: '붉은 카펫', grass: '잔디' };
+  const FINISHES = { paint: '매끈한 페인트', plaster: '거친 회벽', hanji: '한지', concrete: '노출 콘크리트', stripe: '세로 줄무늬', brick: '벽돌', diamond: '마름모 무늬', wainscot: '아래쪽 판넬', dots: '물방울 무늬' };
+  const MOODS = { warm: ['따뜻한 전구색', '#ffe2b8'], neutral: ['자연광', '#fff6ea'], cool: ['차가운 흰빛', '#dfeaff'], pink: ['노을 분홍', '#ffc9c4'], green: ['숲빛 초록', '#d6f2d0'], custom: ['직접 고르기', null] };
   const CEILS = { white: '흰 천장', dark: '검은 천장', wood: '나무 천장' };
   const WALL_IDS = { n: '정면(북쪽) 벽', w: '왼쪽(서쪽) 벽', e: '오른쪽(동쪽) 벽', s: '입구(남쪽) 벽' };
   const hexOk = c => /^#[0-9a-f]{6}$/i.test(c || '');
@@ -346,8 +368,15 @@
     L.finish = FINISHES[L.finish] ? L.finish : 'paint';
     L.floor = FLOORS[L.floor] ? L.floor : (FLOORS[p && p.floor] ? p.floor : 'wood');
     L.ceiling = CEILS[L.ceiling] ? L.ceiling : 'white';
+    L.wallFinish = Object.assign({}, L.wallFinish || {}); for (const k of ['n', 'e', 's', 'w', 'p']) if (!FINISHES[L.wallFinish[k]]) L.wallFinish[k] = '';
+    L.floorTint = hexOk(L.floorTint) ? L.floorTint : '#ffffff';
+    const li = Object.assign({}, L.light || {});
+    L.light = { mood: MOODS[li.mood] ? li.mood : 'neutral', color: hexOk(li.color) ? li.color : '#fff6ea', bright: numOk(li.bright) ? Math.max(.2, Math.min(1.8, Number(li.bright))) : 1, spotK: numOk(li.spotK) ? Math.max(0, Math.min(2.5, Number(li.spotK))) : 1, spot: hexOk(li.spot) ? li.spot : '#fff0d8', strips: li.strips !== false };
+    L.lamps = Array.isArray(L.lamps) ? L.lamps.filter(l => l && numOk(l.x) && numOk(l.z)).slice(0, 10).map(l => ({ x: Number(l.x), z: Number(l.z), y: numOk(l.y) ? Number(l.y) : null, color: hexOk(l.color) ? l.color : '#ffd9a0', k: numOk(l.k) ? Math.max(.1, Math.min(3, Number(l.k))) : 1 })) : [];
     return L;
   }
+  const numOk = v => v != null && v !== '' && Number.isFinite(Number(v));
+  const moodColor = L => L.light.mood === 'custom' ? L.light.color : MOODS[L.light.mood][1];
   function rng(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
   function canvasTex(draw, rep) { const c = document.createElement('canvas'); c.width = c.height = 512; draw(c.getContext('2d'), 512); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); t.anisotropy = 4; return t; }
   function noise(g, n, r, light, dark, size) { for (let i = 0; i < n; i++) { g.fillStyle = r() < .5 ? light : dark; const s = size * (.5 + r()); g.fillRect(r() * 512, r() * 512, s, s); } }
@@ -357,12 +386,25 @@
     if (kind === 'stone') return canvasTex((g) => { g.fillStyle = '#cfc8bd'; g.fillRect(0, 0, 512, 512); noise(g, 4000, r, 'rgba(255,255,255,.08)', 'rgba(80,70,60,.08)', 3); g.strokeStyle = 'rgba(90,80,70,.45)'; g.lineWidth = 2; for (let k = 0; k <= 512; k += 256) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, 512); g.moveTo(0, k); g.lineTo(512, k); g.stroke(); } }, [w / 4, d / 4]);
     if (kind === 'dark') return canvasTex((g) => { for (let i = 0; i < 8; i++) { g.fillStyle = `hsl(20, 22%, ${14 + r() * 6}%)`; g.fillRect(0, i * 64, 512, 64); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(0, i * 64, 512, 2); g.fillRect(r() * 512, i * 64, 2, 64); } }, [w / 2.6, d / 2.3]);
     if (kind === 'concrete') return canvasTex((g) => { g.fillStyle = '#9d9a94'; g.fillRect(0, 0, 512, 512); noise(g, 9000, r, 'rgba(255,255,255,.06)', 'rgba(0,0,0,.07)', 4); for (let i = 0; i < 18; i++) { g.fillStyle = `rgba(60,55,50,${.03 + r() * .05})`; g.beginPath(); g.ellipse(r() * 512, r() * 512, 30 + r() * 90, 20 + r() * 60, r() * 3, 0, 6.3); g.fill(); } g.strokeStyle = 'rgba(50,45,40,.35)'; g.strokeRect(1, 1, 510, 510); }, [w / 5, d / 5]);
+    if (kind === 'herring') return canvasTex((g) => { g.fillStyle = '#7a5434'; g.fillRect(0, 0, 512, 512); const L2 = 128, W2 = 32; for (let row = -2; row < 20; row++) for (let col = -2; col < 10; col++) { const x = col * 64, y = row * 64 + col * 32; g.save(); g.translate(x, y); g.rotate(Math.PI / 4); g.fillStyle = `hsl(28, ${38 + r() * 12}%, ${34 + r() * 14}%)`; g.fillRect(0, 0, L2 * .7, W2 * .7); g.strokeStyle = 'rgba(30,18,8,.55)'; g.lineWidth = 2; g.strokeRect(0, 0, L2 * .7, W2 * .7); g.restore(); } }, [w / 1.6, d / 1.6]);
+    if (kind === 'checker') return canvasTex((g) => { for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.fillStyle = (i + j) % 2 ? '#25231f' : '#eeebe4'; g.fillRect(i * 256, j * 256, 256, 256); } noise(g, 3000, r, 'rgba(255,255,255,.06)', 'rgba(120,110,100,.08)', 3); for (let k = 0; k < 14; k++) { g.strokeStyle = `rgba(150,140,130,${.1 + r() * .15})`; g.lineWidth = 1; g.beginPath(); let x = r() * 512, y = r() * 512; g.moveTo(x, y); for (let q = 0; q < 6; q++) { x += (r() - .5) * 80; y += (r() - .5) * 80; g.lineTo(x, y); } g.stroke(); } }, [w / 1.2, d / 1.2]);
+    if (kind === 'terrazzo') return canvasTex((g) => { g.fillStyle = '#e6e0d6'; g.fillRect(0, 0, 512, 512); const cols = ['#b9886a', '#6f7f78', '#c9b28c', '#8a8a8a', '#d9a59a', '#3d3a36']; for (let i = 0; i < 900; i++) { g.fillStyle = cols[Math.floor(r() * cols.length)]; g.beginPath(); const x = r() * 512, y = r() * 512, s = 2 + r() * 9; g.moveTo(x, y); for (let q = 0; q < 5; q++) g.lineTo(x + (r() - .5) * s * 2, y + (r() - .5) * s * 2); g.fill(); } }, [w / 2, d / 2]);
+    if (kind === 'tile') return canvasTex((g) => { g.fillStyle = '#f3f2ef'; g.fillRect(0, 0, 512, 512); noise(g, 2000, r, 'rgba(255,255,255,.1)', 'rgba(0,0,0,.03)', 3); g.strokeStyle = 'rgba(120,120,115,.6)'; g.lineWidth = 4; for (let k = 0; k <= 512; k += 128) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, 512); g.moveTo(0, k); g.lineTo(512, k); g.stroke(); } }, [w / 1.2, d / 1.2]);
+    if (kind === 'grass') return canvasTex((g) => { g.fillStyle = '#4f7a35'; g.fillRect(0, 0, 512, 512); for (let i = 0; i < 9000; i++) { g.strokeStyle = `hsla(${90 + r() * 30}, ${40 + r() * 25}%, ${25 + r() * 25}%, .7)`; g.lineWidth = 1 + r(); const x = r() * 512, y = r() * 512; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * 4, y - 4 - r() * 8); g.stroke(); } }, [w / 2, d / 2]);
     return canvasTex((g) => { g.fillStyle = '#7d2422'; g.fillRect(0, 0, 512, 512); noise(g, 14000, r, 'rgba(255,200,180,.06)', 'rgba(0,0,0,.08)', 2); }, [w / 3, d / 3]);
   }
   const finishCache = {};
-  function finishTexture(kind) {
+  // metres covered by one texture tile [x, y]; y null = stretch over the wall height
+  const TILE = { plaster: [3, 3], hanji: [3, 3], concrete: [2.4, 1.2], stripe: [.9, 2], brick: [1.2, 1.2], diamond: [.8, .8], wainscot: [1.5, null], dots: [.6, .6] };
+  function finishTexture(kind, hh) {
     if (kind === 'paint') return null;
-    if (finishCache[kind]) return finishCache[kind];
+    const key = kind === 'wainscot' ? kind + Math.round((hh || 5) * 10) : kind;
+    if (finishCache[key]) return finishCache[key];
+    if (kind === 'stripe') return (finishCache[key] = canvasTex(g => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, 512, 512); g.fillStyle = 'rgba(0,0,0,.13)'; g.fillRect(0, 0, 256, 512); g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(250, 0, 6, 512); g.fillRect(506, 0, 6, 512); }, [1, 1]));
+    if (kind === 'brick') { const r = rng(5); return (finishCache[key] = canvasTex(g => { g.fillStyle = '#9a9a9a'; g.fillRect(0, 0, 512, 512); for (let row = 0; row < 8; row++) for (let c = -1; c < 4; c++) { const x = c * 128 + (row % 2 ? 64 : 0); g.fillStyle = `hsl(0, 0%, ${84 + r() * 14}%)`; g.fillRect(x + 4, row * 64 + 4, 120, 56); } }, [1, 1])); }
+    if (kind === 'diamond') return (finishCache[key] = canvasTex(g => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, 512, 512); g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 6; g.beginPath(); g.moveTo(256, 0); g.lineTo(512, 256); g.lineTo(256, 512); g.lineTo(0, 256); g.closePath(); g.stroke(); g.fillStyle = 'rgba(0,0,0,.08)'; g.beginPath(); g.moveTo(256, 150); g.lineTo(362, 256); g.lineTo(256, 362); g.lineTo(150, 256); g.closePath(); g.fill(); }, [1, 1]));
+    if (kind === 'dots') return (finishCache[key] = canvasTex(g => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, 512, 512); g.fillStyle = 'rgba(0,0,0,.16)'; for (const [x, y] of [[128, 128], [384, 384]]) { g.beginPath(); g.arc(x, y, 46, 0, 6.3); g.fill(); } }, [1, 1]));
+    if (kind === 'wainscot') { const hh2 = hh || 5, py = 512 * (1 - 1.05 / hh2); return (finishCache[key] = canvasTex(g => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, 512, 512); g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(0, py, 512, 512 - py); g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(0, py - 10, 512, 10); g.strokeStyle = 'rgba(0,0,0,.2)'; g.lineWidth = 4; g.strokeRect(40, py + 30, 432, 512 - py - 70); }, [1, 1])); }
     const r = rng(31 + kind.length);
     const t = kind === 'plaster' ? canvasTex(g => { g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, 512, 512); for (let i = 0; i < 1600; i++) { g.fillStyle = `rgba(${r() < .5 ? '255,255,255' : '120,120,120'},${.05 + r() * .08})`; g.beginPath(); g.ellipse(r() * 512, r() * 512, 3 + r() * 14, 2 + r() * 8, r() * 3, 0, 6.3); g.fill(); } }, [3, 1.5])
       : kind === 'hanji' ? canvasTex(g => { g.fillStyle = '#f7f1e3'; g.fillRect(0, 0, 512, 512); for (let i = 0; i < 2600; i++) { g.strokeStyle = `rgba(${r() < .5 ? '255,255,255' : '150,130,100'},${.06 + r() * .08})`; g.lineWidth = .6 + r(); const x = r() * 512, y = r() * 512, a = r() * 6.3, l = 4 + r() * 18; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); } }, [4, 2])
@@ -370,8 +412,8 @@
     return (finishCache[kind] = t);
   }
   function wallMaterial(color, finish, len, hh) {
-    let map = finishTexture(finish);
-    if (map && len) { map = map.clone(); map.needsUpdate = true; map.repeat.set(len / (finish === 'concrete' ? 2.4 : 3), hh / (finish === 'concrete' ? 1.2 : 3)); }
+    let map = finishTexture(finish, hh);
+    if (map && len) { const t = TILE[finish] || [3, 3]; map = map.clone(); map.needsUpdate = true; map.repeat.set(Math.max(1, Math.round(len / t[0])), t[1] ? hh / t[1] : 1); }
     return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), map, roughness: finish === 'paint' ? .9 : 1 });
   }
   function isDark(hex) { const n = parseInt(hex.slice(1), 16); return ((n >> 16 & 255) * .3 + (n >> 8 & 255) * .59 + (n & 255) * .11) < 110; }
@@ -444,28 +486,30 @@
     const s = new THREE.Scene(); s.background = new THREE.Color(0x15130f); s.environment = G.envTex;
     const place = { scene: s, inter: [], reach: 9, updates: [], walls: [] };
     // floor, ceiling
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: floorTexture(L.floor, w, d), roughness: L.floor === 'carpet' ? 1 : .42 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: floorTexture(L.floor, w, d), color: new THREE.Color(L.floorTint), roughness: ['carpet', 'grass'].includes(L.floor) ? 1 : (['checker', 'tile'].includes(L.floor) ? .25 : .42) }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; s.add(floor);
     const ceilMat = L.ceiling === 'wood' ? new THREE.MeshStandardMaterial({ map: (() => { const t = G.woodTexture(); t.repeat.set(w / 3, d / 3); return t; })(), roughness: .8 }) : new THREE.MeshStandardMaterial({ color: L.ceiling === 'dark' ? 0x24211e : 0xf2efe8, roughness: 1 });
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ceilMat); ceil.rotation.x = Math.PI / 2; ceil.position.y = h; s.add(ceil);
     // walls (outer)
     geo.surfaces.forEach(sf => {
       const isPanel = sf.id[0] === 'p';
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sf.len, sf.h), wallMaterial(sf.color, L.finish, sf.len, sf.h));
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sf.len, sf.h), wallMaterial(sf.color, L.wallFinish[sf.id[0] === 'p' ? 'p' : sf.id] || L.finish, sf.len, sf.h));
       mesh.position.copy(sf.center).addScaledVector(sf.normal, isPanel ? .001 : 0); mesh.position.y = sf.h / 2; mesh.rotation.y = sf.ry; mesh.receiveShadow = true;
       mesh.userData.surface = sf; s.add(mesh); place.walls.push(mesh);
       if (!isPanel) { const bb = new THREE.Mesh(new THREE.BoxGeometry(sf.len, .12, .03), new THREE.MeshStandardMaterial({ color: 0x2a221a })); bb.position.copy(sf.center).addScaledVector(sf.normal, .015); bb.position.y = .06; bb.rotation.y = sf.ry; s.add(bb); }
     });
     // partition bodies (edges + top)
     geo.panels.forEach(pn => {
-      const box = new THREE.Mesh(pn.along === 'x' ? new THREE.BoxGeometry(pn.len, geo.ph, .28) : new THREE.BoxGeometry(.28, geo.ph, pn.len), wallMaterial(L.walls.p, L.finish));
+      const box = new THREE.Mesh(pn.along === 'x' ? new THREE.BoxGeometry(pn.len, geo.ph, .28) : new THREE.BoxGeometry(.28, geo.ph, pn.len), wallMaterial(L.walls.p, L.wallFinish.p || L.finish));
       box.position.set(pn.x, geo.ph / 2, pn.z); box.castShadow = box.receiveShadow = true; s.add(box);
     });
     // light
-    s.add(new THREE.HemisphereLight(0xfff4e2, 0x3a2f24, .42)); s.add(new THREE.AmbientLight(0xffffff, .08));
-    const strip = new THREE.MeshBasicMaterial({ color: 0xfff6e6 });
+    const mood = new THREE.Color(moodColor(L)), br = L.light.bright;
+    s.add(new THREE.HemisphereLight(mood, 0x3a2f24, .42 * br)); s.add(new THREE.AmbientLight(mood, .08 * br));
+    const strip = new THREE.MeshBasicMaterial({ color: mood });
+    if (L.light.strips)
     for (let x = -w / 2 + 3; x < w / 2 - 1; x += Math.max(3, w / 4)) { const m = new THREE.Mesh(new THREE.BoxGeometry(.14, .04, d * .8), strip); m.position.set(x, h - .03, 0); s.add(m); }
-    const fill = new THREE.PointLight(0xfff2de, .35, Math.max(w, d) * 1.4); fill.position.set(0, h - .5, 0); s.add(fill);
+    const fill = new THREE.PointLight(mood, .35 * br, Math.max(w, d) * 1.4); fill.position.set(0, h - .5, 0); s.add(fill);
     // sign + map kiosk
     const signBg = isDark(L.walls.n) ? '#f1e8d6' : '#221f19', signFg = isDark(L.walls.n) ? '#2b241b' : '#f1e8d6';
     const signW = Math.min(5.2, w * .5);
@@ -491,10 +535,12 @@
       const lbl = new THREE.Mesh(new THREE.PlaneGeometry(.56, .28), new THREE.MeshBasicMaterial({ map: G.textTexture([a.title, p.display_name, a.for_sale ? '판매 중 · ' + won(a.price) : (a.year || ' ')], { w: 768, h: 384, title: 44, body: 28, pad: 50 }), toneMapped: false }));
       s.add(lbl);
       let dot = null; if (a.for_sale) { dot = new THREE.Mesh(new THREE.CircleGeometry(.045, 20), new THREE.MeshBasicMaterial({ color: 0xb8432f })); s.add(dot); }
-      let sp = null; if (spots++ < 12) { sp = new THREE.SpotLight(0xfff0d8, 1.1, 12, Math.PI / 7, .55, 1.2); s.add(sp, sp.target); }
+      let sp = null; if (spots++ < 12) { sp = new THREE.SpotLight(new THREE.Color(L.light.spot), 1.1 * L.light.spotK, 12, Math.PI / 7, .55, 1.2); sp.visible = L.light.spotK > 0; s.add(sp, sp.target); }
       const entry = { art: a, pl, surf, g, pic, lbl, dot, sp };
       layoutEntry(entry, surf, pl, h); place.hung.push(entry);
     });
+    place.lamps = L.lamps.map((lp, i) => makeLamp(s, lp, i, h));
+    place.layout = L;
     if (!place.hung.length) {
       const msg = own ? ['아직 걸린 작품이 없습니다', '「내 갤러리 관리 > 작품」에서 올리거나', '「벽에 걸기」를 누르고 벽을 클릭하세요.'] : ['아직 걸린 작품이 없습니다', '작가가 작품을 준비하고 있어요.'];
       G.wallText(s, msg, 0, Math.min(2.1, h / 2), -d / 2 + .03, 0, Math.min(3.6, w * .4), { title: 64, body: 34 });
@@ -532,6 +578,24 @@
     place.name = [own ? '내 갤러리' : '작가 갤러리', p.gallery_name || p.display_name];
     place.ownerId = p.id; place.geo = geo;
     return place;
+  }
+  // A hanging lamp: cord, glowing bulb and a point light. The bulb is the handle in edit mode.
+  function makeLamp(s, lp, i, roomH) {
+    const g = new THREE.Group(); s.add(g);
+    const col = new THREE.Color(lp.color);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(.14, 20, 14), new THREE.MeshBasicMaterial({ color: col.clone().lerp(new THREE.Color(0xffffff), .35), toneMapped: false })); g.add(bulb);
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(.3, .26, 24, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2520, roughness: .6, side: THREE.DoubleSide })); shade.position.y = .12; g.add(shade);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(.008, .008, 1, 6), new THREE.MeshBasicMaterial({ color: 0x1a1714 })); g.add(cord);
+    const light = new THREE.PointLight(col, 1.2 * lp.k, 9, 1.6); g.add(light);
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(.42, 10, 8), new THREE.MeshBasicMaterial({ visible: false })); hit.userData.lampIdx = i; g.add(hit);
+    const L = { lp, g, bulb, light, cord, hit, roomH };
+    placeLamp(L); return L;
+  }
+  function placeLamp(Lm) {
+    const lp = Lm.lp, y = lp.y == null ? Math.min(Lm.roomH - 1.1, 3.4) : Math.max(1.8, Math.min(Lm.roomH - .4, lp.y));
+    Lm.g.position.set(lp.x, y, lp.z);
+    const len = Math.max(.05, Lm.roomH - y - .2); Lm.cord.scale.y = len; Lm.cord.position.y = .25 + len / 2;
+    const col = new THREE.Color(lp.color); Lm.light.color.copy(col); Lm.light.intensity = 1.2 * lp.k; Lm.bulb.material.color.copy(col.clone().lerp(new THREE.Color(0xffffff), .35));
   }
   // Put a hung work (frame, label, sale dot, spotlight) at a placement on a surface.
   function layoutEntry(e, surf, pl, roomH) {
@@ -623,10 +687,19 @@
       <button type="button" class="btn small" data-ed="undo">되돌리기</button>
       <button type="button" class="btn small" data-ed="redo">다시</button>
       <select id="pfEditStore" aria-label="보관 중인 작품 걸기"></select>
+      <button type="button" class="btn small" data-ed="addLamp">전등 달기</button>
+    </div>
+    <div class="pfEditBtns" id="pfLampBtns" hidden>
+      <label class="pfLampColor">전등 색 <input type="color" id="pfLampColor"></label>
+      <button type="button" class="btn small" data-ed="dimmer">어둡게</button>
+      <button type="button" class="btn small" data-ed="brighter">밝게</button>
+      <button type="button" class="btn small" data-ed="lower">낮게</button>
+      <button type="button" class="btn small" data-ed="higher">높게</button>
+      <button type="button" class="btn small" data-ed="delLamp">전등 떼기</button>
       <button type="button" class="btn small primary" data-ed="done">편집 끝내기</button>
     </div>`;
   document.body.appendChild(bar);
-  let editing = false, sel = null, dragE = null, undoS = [], redoS = [];
+  let editing = false, sel = null, dragE = null, undoS = [], redoS = [], selLamp = null, addingLamp = false, dragL = null;
   let outline = null, guideV = null, guideH = null;
   const myCur = () => user && G.getCurId() === 'u:' + user.id ? G.cache['u:' + user.id] : null;
   const edRay = new THREE.Raycaster();
@@ -641,7 +714,11 @@
   function edMsg(t) { $('pfEditMsg').textContent = t; }
   function refreshBar() {
     bar.querySelectorAll('[data-ed]').forEach(b => { const k = b.dataset.ed; if (['smaller', 'bigger', 'center', 'eye', 'down'].includes(k)) b.disabled = !sel; });
+    $('pfLampBtns').hidden = !selLamp; if (selLamp) $('pfLampColor').value = selLamp.lp.color;
+    bar.querySelector('[data-ed=addLamp]').textContent = addingLamp ? '전등 달 곳을 바닥에서 누르세요' : '전등 달기';
     bar.querySelector('[data-ed=undo]').disabled = !undoS.length; bar.querySelector('[data-ed=redo]').disabled = !redoS.length;
+    if (dragL) return;
+    if (selLamp) { edMsg('전등 선택됨 · 끌어서 옮기거나 아래에서 색과 밝기를 바꾸세요'); return; }
     if (!dragE) edMsg(sel ? `「${sel.art.title}」 선택됨 · 끌어서 옮기거나 아래 버튼으로 조절하세요` : '작품을 누른 채 끌어서 옮기세요. 다른 벽으로도 옮길 수 있어요.');
   }
   function startEdit() {
@@ -651,7 +728,7 @@
     // 자동으로 걸린 작품의 자리를 고정해서, 다른 작품을 옮겨도 따라 움직이지 않게 한다.
     myCur().hung.forEach(h => { if (!(h.art.placement && h.art.placement.wall)) save(h.art, clonePl(h.pl)); });
   }
-  function stopEdit() { editing = false; select(null); bar.hidden = true; editBtn.textContent = '전시 편집'; document.body.classList.remove('pfEditing'); hideGuides(); }
+  function stopEdit() { editing = false; addingLamp = false; select(null); selectLamp(null); bar.hidden = true; editBtn.textContent = '전시 편집'; document.body.classList.remove('pfEditing'); hideGuides(); }
   editBtn.addEventListener('click', () => editing ? stopEdit() : startEdit());
   function overlaps(e, pl) {
     const a = artSize(e.art, pl.s), sg = myCur().sign;
@@ -660,7 +737,7 @@
   }
   function select(e) {
     if (outline && outline.parent) outline.parent.remove(outline);
-    sel = e || null;
+    sel = e || null; if (sel) selectLamp(null, true);
     if (sel) {
       const { w, h } = artSize(sel.art, 1);
       outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w + .2, h + .2)), new THREE.LineBasicMaterial({ color: 0x7fd1ae, depthTest: false, transparent: true }));
@@ -695,10 +772,43 @@
     const sf = hit.object.userData.surface, rel = hit.point.clone().sub(sf.center);
     return { surf: sf, x: rel.dot(sf.right), y: hit.point.y };
   }
+  let lampRing = null;
+  function selectLamp(Lm, quiet) {
+    if (lampRing && lampRing.parent) lampRing.parent.remove(lampRing);
+    selLamp = Lm || null;
+    if (selLamp) { if (sel && !quiet) select(null); lampRing = new THREE.Mesh(new THREE.TorusGeometry(.36, .025, 8, 32), new THREE.MeshBasicMaterial({ color: 0x7fd1ae, depthTest: false })); lampRing.renderOrder = 10; lampRing.rotation.x = Math.PI / 2; selLamp.g.add(lampRing); }
+    if (!quiet) refreshBar();
+  }
+  const lampsOf = () => myCur().lamps.map(l => Object.assign({}, l.lp));
+  function saveLamps() {
+    const lamps = lampsOf();
+    const L = Object.assign({}, (profile && profile.layout) || {}, { lamps });
+    profile = Object.assign({}, profile, { layout: L }); if (galleryData[user.id]) galleryData[user.id].p.layout = L;
+    return B.saveProfile({ id: user.id, layout: L }).catch(ex => G.toast('저장하지 못했습니다: ' + ex.message));
+  }
+  function commitLamps(before) { undoS.push({ lamps: true, before, after: lampsOf() }); redoS = []; saveLamps(); refreshBar(); }
+  async function applyLamps(list, selIdx) {
+    const L = Object.assign({}, (profile && profile.layout) || {}, { lamps: list });
+    profile = Object.assign({}, profile, { layout: L }); if (galleryData[user.id]) galleryData[user.id].p.layout = L;
+    await B.saveProfile({ id: user.id, layout: L }); sel = null; await reloadGallery(user.id);
+    selectLamp(selIdx != null ? myCur().lamps[selIdx] : null);
+  }
+  function floorAt(ndc, y) { edRay.setFromCamera(ndc, G.camera); const pt = new THREE.Vector3(); return edRay.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), pt) ? pt : null; }
+  function clampXZ(pt) { const g = myCur().geo; pt.x = Math.max(-g.w / 2 + .5, Math.min(g.w / 2 - .5, pt.x)); pt.z = Math.max(-g.d / 2 + .5, Math.min(g.d / 2 - .5, pt.z)); return pt; }
   G.onPointerDown = ndc => {
     if (!editing || placing || G.isPanelOpen()) return false;
     const cur = myCur(); if (!cur) return false;
-    edRay.setFromCamera(ndc, G.camera); edRay.far = 30;
+    if (addingLamp) {
+      const pt = floorAt(ndc, 0); addingLamp = false;
+      if (!pt) { refreshBar(); return true; }
+      if (cur.lamps.length >= 10) { G.toast('전등은 10개까지 달 수 있어요.'); refreshBar(); return true; }
+      clampXZ(pt); const before = lampsOf(); const list = before.concat([{ x: Math.round(pt.x * 10) / 10, z: Math.round(pt.z * 10) / 10, y: null, color: '#ffd9a0', k: 1 }]);
+      undoS.push({ lamps: true, before, after: list }); redoS = []; applyLamps(list, list.length - 1); return true;
+    }
+    edRay.setFromCamera(ndc, G.camera); edRay.far = 40;
+    const lh = edRay.intersectObjects(cur.lamps.map(l => l.hit), false)[0];
+    if (lh) { const Lm = cur.lamps[lh.object.userData.lampIdx]; select(null); selectLamp(Lm); dragL = { Lm, before: lampsOf(), moved: false, y: Lm.g.position.y }; const p0 = floorAt(ndc, dragL.y); dragL.off = p0 ? { x: Lm.lp.x - p0.x, z: Lm.lp.z - p0.z } : { x: 0, z: 0 }; return true; }
+    edRay.far = 30;
     const hit = edRay.intersectObjects(cur.hung.map(h => h.pic), false)[0];
     if (!hit) return false;
     const e = cur.hung.find(h => h.pic === hit.object); select(e);
@@ -707,6 +817,7 @@
     return true;
   };
   G.onPointerMove = ndc => {
+    if (dragL) { const pt = floorAt(ndc, dragL.y); if (!pt) return; pt.x += dragL.off.x; pt.z += dragL.off.z; clampXZ(pt); dragL.Lm.lp.x = Math.round(pt.x * 20) / 20; dragL.Lm.lp.z = Math.round(pt.z * 20) / 20; placeLamp(dragL.Lm); dragL.moved = true; edMsg('전등을 옮기는 중'); return; }
     if (!dragE) return;
     const wp = wallPoint(ndc); if (!wp) return;
     if (wp.surf.id !== dragE.surfId) { dragE.offX = 0; dragE.surfId = wp.surf.id; }
@@ -718,6 +829,7 @@
     edMsg([wp.surf.label, g.gx ? '세로 줄 맞춤' : '', g.gy ? '높이 줄 맞춤' : '', overlaps(dragE.e, pl) ? '다른 작품이나 간판과 겹칩니다' : ''].filter(Boolean).join(' · '));
   };
   G.onPointerUp = () => {
+    if (dragL) { const d = dragL; dragL = null; if (d.moved) commitLamps(d.before); refreshBar(); return; }
     if (!dragE) return; const d = dragE; dragE = null; hideGuides();
     if (d.moved) commit(d.e.art, d.before, clonePl(d.e.pl));
     refreshBar();
@@ -733,6 +845,9 @@
     await reloadGallery(user.id); fillStore();
     const nc = myCur(); select(nc && nc.hung.find(h => h.art.id === art.id));
   }
+  function lampChange(fn) { if (!selLamp) return; const before = lampsOf(); fn(selLamp.lp); placeLamp(selLamp); commitLamps(before); }
+  $('pfLampColor').addEventListener('change', e => lampChange(lp => { lp.color = e.target.value; }));
+  $('pfLampColor').addEventListener('input', e => { if (selLamp) { selLamp.lp.color = e.target.value; placeLamp(selLamp); } });
   function change(fn) { if (!sel) return; const before = clonePl(sel.pl); const pl = clampPlacement(fn(clonePl(sel.pl)), sel.surf, sel.art); layoutEntry(sel, sel.surf, pl, myCur().geo.h); paintOutline(); commit(sel.art, before, clonePl(pl)); }
   const ED = {
     smaller: () => change(pl => Object.assign(pl, { s: pl.s / 1.12 })),
@@ -740,8 +855,14 @@
     center: () => change(pl => Object.assign(pl, { x: 0 })),
     eye: () => change(pl => Object.assign(pl, { y: EYE })),
     down: async () => { if (!sel) return; const art = sel.art, before = clonePl(sel.pl); select(null); undoS.push({ art, before, after: { stored: true } }); redoS = []; await applyPl(art, { stored: true }); G.toast(`「${art.title}」을(를) 보관함에 넣었습니다.`); refreshBar(); },
-    undo: async () => { const u = undoS.pop(); if (!u) return; redoS.push(u); await applyPl(u.art, u.before == null ? null : clonePl(u.before)); refreshBar(); },
-    redo: async () => { const u = redoS.pop(); if (!u) return; undoS.push(u); await applyPl(u.art, clonePl(u.after)); refreshBar(); },
+    addLamp: () => { addingLamp = !addingLamp; select(null); selectLamp(null); refreshBar(); if (addingLamp) edMsg('전등을 달 바닥 위치를 누르세요'); },
+    dimmer: () => lampChange(lp => { lp.k = Math.max(.1, lp.k / 1.25); }),
+    brighter: () => lampChange(lp => { lp.k = Math.min(3, lp.k * 1.25); }),
+    lower: () => lampChange(lp => { lp.y = Math.max(1.8, (lp.y == null ? selLamp.g.position.y : lp.y) - .3); }),
+    higher: () => lampChange(lp => { lp.y = Math.min(selLamp.roomH - .4, (lp.y == null ? selLamp.g.position.y : lp.y) + .3); }),
+    delLamp: async () => { if (!selLamp) return; const before = lampsOf(), list = before.filter((_, i) => i !== myCur().lamps.indexOf(selLamp)); undoS.push({ lamps: true, before, after: list }); redoS = []; selectLamp(null); await applyLamps(list); refreshBar(); },
+    undo: async () => { const u = undoS.pop(); if (!u) return; redoS.push(u); if (u.lamps) { await applyLamps(u.before); refreshBar(); return; } await applyPl(u.art, u.before == null ? null : clonePl(u.before)); refreshBar(); },
+    redo: async () => { const u = redoS.pop(); if (!u) return; undoS.push(u); if (u.lamps) { await applyLamps(u.after); refreshBar(); return; } await applyPl(u.art, clonePl(u.after)); refreshBar(); },
     done: () => stopEdit(),
   };
   bar.querySelectorAll('[data-ed]').forEach(b => b.addEventListener('click', () => ED[b.dataset.ed]()));
@@ -750,8 +871,8 @@
     const k = e.key;
     if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? ED.redo() : ED.undo(); }
     else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'y') { e.preventDefault(); ED.redo(); }
-    else if (k === '+' || k === '=') ED.bigger(); else if (k === '-') ED.smaller();
-    else if (k === 'Delete' || k === 'Backspace') ED.down();
+    else if (k === '+' || k === '=') { selLamp ? ED.brighter() : ED.bigger(); } else if (k === '-') { selLamp ? ED.dimmer() : ED.smaller(); }
+    else if (k === 'Delete' || k === 'Backspace') { selLamp ? ED.delLamp() : ED.down(); }
   });
   (function watch() { requestAnimationFrame(watch); const mine = !!myCur(); editBtn.hidden = !mine; if (editing && !mine) stopEdit(); })();
 

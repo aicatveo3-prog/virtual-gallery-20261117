@@ -59,6 +59,10 @@ body.touch #help { bottom: auto; top: calc(116px + env(safe-area-inset-top, 0px)
 #pfEditBar .btn.primary { background: var(--paper); color: var(--text-on-paper); }
 #pfPlaceBar .btn { color: var(--paper); border-color: rgba(241,232,214,.45); }
 #pfEditBar .btn:disabled { opacity: .4; }
+.pfLampColor { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.pfLampColor input { width: 40px; height: 30px; padding: 0; border: 1px solid var(--line); background: none; }
+.pfWalls label select { font: 12px var(--body); padding: 5px; border-radius: 4px; border: 1px solid #cfc2a8; background: #fbf7ee; color: var(--text-on-paper); width: 100%; }
+.pfForm input[type=range] { width: 100%; accent-color: var(--celadon); }
 body.pfEditing #help { display: none; }
 body.touch #pfEditBar { bottom: auto; top: calc(116px + env(safe-area-inset-top, 0px)); }
 #zoomTag { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 5; font: 12px var(--body); color: var(--paper); background: rgba(21,19,15,.7); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
