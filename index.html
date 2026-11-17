@@ -51,6 +51,16 @@ body { background: var(--ink); color: var(--paper); font-family: var(--body); ov
 #hint { position: fixed; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); z-index: 4; pointer-events: none; font-size: 13px; background: rgba(21,19,15,.72); border: 1px solid var(--line); padding: 6px 10px; border-radius: 4px; white-space: nowrap; }
 #help { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 4; font-size: 12px; color: var(--paper-2); background: rgba(21,19,15,.55); padding: 6px 12px; border-radius: 4px; pointer-events: none; text-align: center; max-width: calc(100% - 32px); }
 body.touch #help { bottom: auto; top: calc(116px + env(safe-area-inset-top, 0px)); }
+#pfEditBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(52px + env(safe-area-inset-bottom, 0px)); z-index: 6; display: grid; gap: 8px; background: rgba(21,19,15,.9); color: var(--paper); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--celadon); width: max-content; max-width: calc(100% - 32px); box-sizing: border-box; }
+.pfEditMsg { font-size: 13px; text-align: center; overflow-wrap: anywhere; }
+.pfEditBtns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.pfEditBtns select { font: 13px var(--body); padding: 5px 6px; border-radius: 4px; border: 1px solid var(--line); background: #2a251e; color: var(--paper); max-width: 180px; }
+#pfEditBar .btn { color: var(--paper); border-color: rgba(241,232,214,.45); padding: 7px 10px; font-size: 13px; }
+#pfEditBar .btn.primary { background: var(--paper); color: var(--text-on-paper); }
+#pfPlaceBar .btn { color: var(--paper); border-color: rgba(241,232,214,.45); }
+#pfEditBar .btn:disabled { opacity: .4; }
+body.pfEditing #help { display: none; }
+body.touch #pfEditBar { bottom: auto; top: calc(116px + env(safe-area-inset-top, 0px)); }
 #zoomTag { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 5; font: 12px var(--body); color: var(--paper); background: rgba(21,19,15,.7); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
 #help kbd { font-family: var(--body); font-size: 11px; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 
@@ -991,14 +1001,18 @@ window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; }
 const el = renderer.domElement;
 document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === el; updateHelp(); });
 let drag = null;
-el.addEventListener('mousedown', e => { if (!started || panelOpen) return; drag = { x: e.clientX, y: e.clientY, moved: 0 }; });
+const ndcOf = (x, y) => new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
+let captured = false;
+el.addEventListener('mousedown', e => { if (!started || panelOpen) return; if (G.onPointerDown && G.onPointerDown(ndcOf(e.clientX, e.clientY))) { captured = true; return; } drag = { x: e.clientX, y: e.clientY, moved: 0 }; });
 window.addEventListener('mousemove', e => {
   if (!started || panelOpen) return;
+  if (captured) { mouseNDC.copy(ndcOf(e.clientX, e.clientY)); G.onPointerMove(mouseNDC); return; }
   if (locked) { look(e.movementX, e.movementY); return; }
   if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy); drag.x = e.clientX; drag.y = e.clientY; look(-dx * 1.2, -dy * 1.2); }
   mouseNDC.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
 });
 window.addEventListener('mouseup', e => {
+  if (captured) { captured = false; G.onPointerUp(ndcOf(e.clientX, e.clientY)); return; }
   if (!drag) return; const wasDrag = drag.moved > 6; drag = null;
   if (wasDrag || panelOpen || !started) return;
   const ndcUp = locked ? new THREE.Vector2(0, 0) : new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
@@ -1016,7 +1030,7 @@ const mouseNDC = new THREE.Vector2(0, 0);
 function look(dx, dy) { const k = .0024 / zoom; player.yaw -= dx * k; player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch - dy * k)); }
 
 // touch
-const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 }, lookT = { id: null, x: 0, y: 0, sx: 0, sy: 0, t: 0 }, pinch = { id: null, d0: 0, z0: 1 };
+const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 }, lookT = { id: null, cap: null, x: 0, y: 0, sx: 0, sy: 0, t: 0 }, pinch = { id: null, d0: 0, z0: 1 };
 let walkTo = null;
 const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 function floorPoint(ndc) {
@@ -1034,6 +1048,7 @@ if (isTouch) {
     for (const t of e.changedTouches) {
       const r = $('joy').getBoundingClientRect();
       if (joy.id === null && t.clientX < r.right + 40 && t.clientY > r.top - 40) { joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY; joy.x = joy.y = 0; walkTo = null; }
+      else if (lookT.id === null && G.onPointerDown && G.onPointerDown(ndcOf(t.clientX, t.clientY))) { lookT.cap = t.identifier; }
       else if (lookT.id === null) { lookT.id = t.identifier; lookT.x = lookT.sx = t.clientX; lookT.y = lookT.sy = t.clientY; lookT.t = performance.now(); }
       else if (pinch.id === null) { pinch.id = t.identifier; pinch.x = t.clientX; pinch.y = t.clientY; pinch.d0 = Math.hypot(t.clientX - lookT.x, t.clientY - lookT.y) || 1; pinch.z0 = zoom; lookT.t = 0; }
     }
@@ -1041,6 +1056,7 @@ if (isTouch) {
   }, { passive: false });
   el.addEventListener('touchmove', e => {
     for (const t of e.changedTouches) {
+      if (t.identifier === lookT.cap) { G.onPointerMove(ndcOf(t.clientX, t.clientY)); continue; }
       if (t.identifier === joy.id) { joy.x = Math.max(-1, Math.min(1, (t.clientX - joy.ox) / 50)); joy.y = Math.max(-1, Math.min(1, (t.clientY - joy.oy) / 50)); $('joyKnob').style.transform = `translate(${joy.x * 35}px, ${joy.y * 35}px)`; }
       else if (t.identifier === lookT.id) { if (pinch.id === null) look(-(t.clientX - lookT.x) * 2.2, -(t.clientY - lookT.y) * 2.2); lookT.x = t.clientX; lookT.y = t.clientY; }
       else if (t.identifier === pinch.id) { pinch.x = t.clientX; pinch.y = t.clientY; }
@@ -1051,6 +1067,7 @@ if (isTouch) {
   const end = e => {
     for (const t of e.changedTouches) {
       if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; $('joyKnob').style.transform = ''; }
+      else if (t.identifier === lookT.cap) { lookT.cap = null; G.onPointerUp(ndcOf(t.clientX, t.clientY)); }
       else if (t.identifier === pinch.id) { pinch.id = null; }
       else if (t.identifier === lookT.id) {
         lookT.id = null; if (pinch.id !== null) { pinch.id = null; continue; }

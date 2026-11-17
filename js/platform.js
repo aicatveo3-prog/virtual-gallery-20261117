@@ -393,10 +393,15 @@
     });
     return { w, d, h, ph, surfaces: out, panels };
   }
-  function artSize(a) { const ar = (a.width && a.height) ? a.width / a.height : 1; let w = 2.2, h = w / ar; if (h > 1.9) { h = 1.9; w = h * ar; } return { w, h }; }
+  const SC_MIN = .35, SC_MAX = 2.6;
+  // Base size fits 1.5×1.3m; placement.s scales it.
+  function artSize(a, sc) { const ar = (a.width && a.height) ? a.width / a.height : 1; let w = 1.5, h = w / ar; if (h > 1.3) { h = 1.3; w = h * ar; } const k = sc || 1; return { w: w * k, h: h * k }; }
   function clampPlacement(pl, surf, a) {
-    const { w, h } = artSize(a), half = surf.len / 2 - w / 2 - .25;
-    return { wall: surf.id, x: Math.max(-Math.max(half, 0), Math.min(Math.max(half, 0), pl.x)), y: Math.max(h / 2 + .45, Math.min(surf.h - h / 2 - .2, pl.y)) };
+    let sc = Math.max(SC_MIN, Math.min(SC_MAX, Number(pl.s) || 1.45));
+    let { w, h } = artSize(a, sc);
+    const fit = Math.min((surf.len - .5) / (w + .12), (surf.h - .5) / (h + .12), 1); if (fit < 1) { sc *= fit; ({ w, h } = artSize(a, sc)); }
+    const half = Math.max(surf.len / 2 - w / 2 - .25, 0);
+    return { wall: surf.id, x: Math.max(-half, Math.min(half, pl.x)), y: Math.max(h / 2 + .3, Math.min(surf.h - h / 2 - .2, pl.y)), s: Math.round(sc * 100) / 100 };
   }
   // Fill empty spots automatically for works that have never been placed.
   function autoPlace(arts, geo) {
@@ -428,7 +433,8 @@
     for (const a of arts) {
       const pl = a.placement;
       const surf = pl && pl.wall && geo.surfaces.find(x => x.id === pl.wall);
-      out[a.id] = surf ? clampPlacement(pl, surf, a) : (pl && pl.stored ? null : (auto[a.id] || null));
+      const ap = auto[a.id], as = ap && geo.surfaces.find(x => x.id === ap.wall);
+      out[a.id] = surf ? clampPlacement(pl, surf, a) : (pl && pl.stored ? null : (as ? clampPlacement(ap, as, a) : null));
     }
     return out;
   }
@@ -463,7 +469,8 @@
     // sign + map kiosk
     const signBg = isDark(L.walls.n) ? '#f1e8d6' : '#221f19', signFg = isDark(L.walls.n) ? '#2b241b' : '#f1e8d6';
     const signW = Math.min(5.2, w * .5);
-    G.wallText(s, [p.gallery_name || p.display_name, p.intro || `${p.display_name} 작가의 갤러리`], 0, h - .5 - signW * 300 / 1600 / 2, -d / 2 + .02, 0, signW, { w: 1600, h: 300, title: 92, body: 40, bg: signBg, fg: signFg, pad: 50 });
+    place.sign = { wall: 'n', x: 0, y: h - .5 - signW * 300 / 1600 / 2, w: signW, h: signW * 300 / 1600 };
+    G.wallText(s, [p.gallery_name || p.display_name, p.intro || `${p.display_name} 작가의 갤러리`], 0, place.sign.y, -d / 2 + .02, 0, signW, { w: 1600, h: 300, title: 92, body: 40, bg: signBg, fg: signFg, pad: 50 });
     G.mapPanelMesh(s, place.inter, w / 2 - 1.4, d / 2 - .02, Math.PI);
     // artworks
     const pls = resolvePlacements(arts, geo);
@@ -473,19 +480,20 @@
     arts.forEach(a => {
       const pl = pls[a.id]; if (!pl) return;
       const surf = geo.surfaces.find(x => x.id === pl.wall); if (!surf) return;
-      place.hung.push({ art: a, pl });
-      const { w: aw, h: ah } = artSize(a);
-      const g = new THREE.Group(); g.position.copy(surf.center).addScaledVector(surf.right, pl.x).addScaledVector(surf.normal, .045); g.position.y = pl.y; g.rotation.y = surf.ry; s.add(g);
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(aw + .12, ah + .12, .07), new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: .6 })); frame.castShadow = true; g.add(frame);
-      const pic = new THREE.Mesh(new THREE.PlaneGeometry(aw, ah), new THREE.MeshStandardMaterial({ color: 0xdedad2, roughness: .85 })); pic.position.z = .04; g.add(pic);
+      const { w: aw, h: ah } = artSize(a, 1);
+      const g = new THREE.Group(); s.add(g);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(aw + .08, ah + .08, .05), new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: .6 })); frame.castShadow = true; g.add(frame);
+      const pic = new THREE.Mesh(new THREE.PlaneGeometry(aw, ah), new THREE.MeshStandardMaterial({ color: 0xdedad2, roughness: .85 })); pic.position.z = .03; g.add(pic);
+      pic.userData.hangId = a.id;
       loader.load(a.url, t => { t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; pic.material.map = t; pic.material.color.set(0xffffff); pic.material.needsUpdate = true; }, undefined, () => console.warn('image failed', a.url));
       pic.userData.action = { type: 'userart', art: a, owner: p, label: own ? '작품 보기 · 옮기기' : (a.for_sale ? '작품 보기 · 구매 요청 가능' : '작품 보기') };
       place.inter.push(pic);
       const lbl = new THREE.Mesh(new THREE.PlaneGeometry(.56, .28), new THREE.MeshBasicMaterial({ map: G.textTexture([a.title, p.display_name, a.for_sale ? '판매 중 · ' + won(a.price) : (a.year || ' ')], { w: 768, h: 384, title: 44, body: 28, pad: 50 }), toneMapped: false }));
-      const side = (pl.x + aw / 2 + .5 > surf.len / 2 - .2) ? -1 : 1;
-      lbl.position.copy(surf.center).addScaledVector(surf.right, pl.x + side * (aw / 2 + .45)).addScaledVector(surf.normal, .02); lbl.position.y = Math.max(1.2, pl.y - ah / 2 + .2); lbl.rotation.y = surf.ry; s.add(lbl);
-      if (a.for_sale) { const dot = new THREE.Mesh(new THREE.CircleGeometry(.045, 20), new THREE.MeshBasicMaterial({ color: 0xb8432f })); dot.position.copy(lbl.position).addScaledVector(surf.right, -.33).addScaledVector(surf.normal, .005); dot.position.y += .1; dot.rotation.y = surf.ry; s.add(dot); }
-      if (spots++ < 10) { const sp = new THREE.SpotLight(0xfff0d8, 1.1, 12, Math.PI / 7, .55, 1.2); sp.position.copy(g.position).addScaledVector(surf.normal, 2.2); sp.position.y = Math.min(h - .3, pl.y + 2.4); sp.target.position.copy(g.position); s.add(sp, sp.target); }
+      s.add(lbl);
+      let dot = null; if (a.for_sale) { dot = new THREE.Mesh(new THREE.CircleGeometry(.045, 20), new THREE.MeshBasicMaterial({ color: 0xb8432f })); s.add(dot); }
+      let sp = null; if (spots++ < 12) { sp = new THREE.SpotLight(0xfff0d8, 1.1, 12, Math.PI / 7, .55, 1.2); s.add(sp, sp.target); }
+      const entry = { art: a, pl, surf, g, pic, lbl, dot, sp };
+      layoutEntry(entry, surf, pl, h); place.hung.push(entry);
     });
     if (!place.hung.length) {
       const msg = own ? ['아직 걸린 작품이 없습니다', '「내 갤러리 관리 > 작품」에서 올리거나', '「벽에 걸기」를 누르고 벽을 클릭하세요.'] : ['아직 걸린 작품이 없습니다', '작가가 작품을 준비하고 있어요.'];
@@ -525,6 +533,16 @@
     place.ownerId = p.id; place.geo = geo;
     return place;
   }
+  // Put a hung work (frame, label, sale dot, spotlight) at a placement on a surface.
+  function layoutEntry(e, surf, pl, roomH) {
+    e.surf = surf; e.pl = pl;
+    const { w: aw, h: ah } = artSize(e.art, pl.s);
+    e.g.position.copy(surf.center).addScaledVector(surf.right, pl.x).addScaledVector(surf.normal, .035); e.g.position.y = pl.y; e.g.rotation.set(0, surf.ry, 0); e.g.scale.set(pl.s, pl.s, 1);
+    const side = (pl.x + aw / 2 + .5 > surf.len / 2 - .2) ? -1 : 1;
+    e.lbl.position.copy(surf.center).addScaledVector(surf.right, pl.x + side * (aw / 2 + .4)).addScaledVector(surf.normal, .02); e.lbl.position.y = Math.max(1.0, Math.min(1.5, pl.y - ah / 2 + .2)); e.lbl.rotation.set(0, surf.ry, 0);
+    if (e.dot) { e.dot.position.copy(e.lbl.position).addScaledVector(surf.right, -.33).addScaledVector(surf.normal, .005); e.dot.position.y += .1; e.dot.rotation.set(0, surf.ry, 0); }
+    if (e.sp) { e.sp.position.copy(e.g.position).addScaledVector(surf.normal, 2.2); e.sp.position.y = Math.min((roomH || 5) - .3, pl.y + 2.4); e.sp.target.position.copy(e.g.position); e.sp.target.updateMatrixWorld(); }
+  }
   const galleryData = {};
   async function loadGallery(id) {
     const p = await B.getProfile(id); if (!p) throw new Error('갤러리를 찾을 수 없습니다.');
@@ -555,12 +573,12 @@
     const hits = pray.intersectObjects(cur.walls, false); if (!hits.length) return null;
     const hpt = hits[0].point, sf = hits[0].object.userData.surface;
     const rel = hpt.clone().sub(sf.center);
-    return { surf: sf, pl: clampPlacement({ wall: sf.id, x: rel.dot(sf.right), y: hpt.y }, sf, placing.art) };
+    return { surf: sf, pl: clampPlacement({ wall: sf.id, x: rel.dot(sf.right), y: hpt.y, s: placing.art.placement && placing.art.placement.s }, sf, placing.art) };
   }
   function ghostUpdate() {
     if (!placing) return;
     const cur = G.cache['u:' + user.id]; if (!cur) return;
-    if (!ghost) { const { w, h } = artSize(placing.art); ghost = new THREE.Mesh(new THREE.PlaneGeometry(w + .12, h + .12), new THREE.MeshBasicMaterial({ color: 0x7fae9a, transparent: true, opacity: .45, depthWrite: false })); }
+    if (!ghost) { const { w, h } = artSize(placing.art, (placing.art.placement && placing.art.placement.s) || 1.45); ghost = new THREE.Mesh(new THREE.PlaneGeometry(w + .12, h + .12), new THREE.MeshBasicMaterial({ color: 0x7fae9a, transparent: true, opacity: .45, depthWrite: false })); }
     if (ghost.parent !== cur.scene) cur.scene.add(ghost);
     const hit = wallHit(G.getPointerNDC());
     ghost.visible = !!hit;
@@ -583,10 +601,159 @@
     if (!placing || G.isPanelOpen()) return false;
     const hit = wallHit(ndc); if (!hit) { G.toast('벽을 눌러 주세요.'); return true; }
     const art = placing.art; stopPlacing();
-    B.updateArtwork(art.id, { placement: hit.pl }).then(() => reloadGallery(user.id)).then(() => G.toast(`「${art.title}」을(를) ${hit.surf.label}에 걸었습니다.`)).catch(ex => G.toast('걸지 못했습니다: ' + ex.message));
+    art.placement = hit.pl; B.updateArtwork(art.id, { placement: hit.pl }).then(() => reloadGallery(user.id)).then(() => { if (editing) { fillStore(); refreshBar(); } }).then(() => G.toast(`「${art.title}」을(를) ${hit.surf.label}에 걸었습니다.`)).catch(ex => G.toast('걸지 못했습니다: ' + ex.message));
     return true;
   };
   async function takeDown(art) { await B.updateArtwork(art.id, { placement: { stored: true } }); await reloadGallery(user.id); G.toast(`「${art.title}」을(를) 벽에서 내렸습니다. 보관함에 있습니다.`); }
+
+
+  /* ---------------- exhibition editor: drag works on the wall, resize, snap, undo ---------------- */
+  const EYE = 1.55, SNAP = .12;
+  const editBtn = document.createElement('button');
+  editBtn.className = 'hbtn'; editBtn.type = 'button'; editBtn.id = 'pfEditBtn'; editBtn.textContent = '전시 편집'; editBtn.hidden = true;
+  $('hudButtons').insertBefore(editBtn, accountBtn);
+  const bar = document.createElement('div'); bar.id = 'pfEditBar'; bar.hidden = true;
+  bar.innerHTML = `<div class="pfEditMsg" id="pfEditMsg">작품을 누른 채 끌어서 옮기세요.</div>
+    <div class="pfEditBtns">
+      <button type="button" class="btn small" data-ed="smaller" aria-label="작게">작게 −</button>
+      <button type="button" class="btn small" data-ed="bigger" aria-label="크게">크게 +</button>
+      <button type="button" class="btn small" data-ed="center">벽 가운데로</button>
+      <button type="button" class="btn small" data-ed="eye">눈높이로</button>
+      <button type="button" class="btn small" data-ed="down">내리기</button>
+      <button type="button" class="btn small" data-ed="undo">되돌리기</button>
+      <button type="button" class="btn small" data-ed="redo">다시</button>
+      <select id="pfEditStore" aria-label="보관 중인 작품 걸기"></select>
+      <button type="button" class="btn small primary" data-ed="done">편집 끝내기</button>
+    </div>`;
+  document.body.appendChild(bar);
+  let editing = false, sel = null, dragE = null, undoS = [], redoS = [];
+  let outline = null, guideV = null, guideH = null;
+  const myCur = () => user && G.getCurId() === 'u:' + user.id ? G.cache['u:' + user.id] : null;
+  const edRay = new THREE.Raycaster();
+  const clonePl = pl => pl ? Object.assign({}, pl) : pl;
+  function storedArts() { const d = galleryData[user.id], cur = myCur(); if (!d || !cur) return []; const on = new Set(cur.hung.map(h => h.art.id)); return d.arts.filter(a => !on.has(a.id)); }
+  function fillStore() {
+    const st = storedArts(), el = $('pfEditStore');
+    el.innerHTML = `<option value="">${st.length ? `보관함에서 걸기 (${st.length})` : '보관함 비어 있음'}</option>` + st.map(a => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join('');
+    el.disabled = !st.length;
+  }
+  $('pfEditStore').addEventListener('change', e => { const a = storedArts().find(x => x.id === e.target.value); e.target.value = ''; if (a) startPlacing(a); });
+  function edMsg(t) { $('pfEditMsg').textContent = t; }
+  function refreshBar() {
+    bar.querySelectorAll('[data-ed]').forEach(b => { const k = b.dataset.ed; if (['smaller', 'bigger', 'center', 'eye', 'down'].includes(k)) b.disabled = !sel; });
+    bar.querySelector('[data-ed=undo]').disabled = !undoS.length; bar.querySelector('[data-ed=redo]').disabled = !redoS.length;
+    if (!dragE) edMsg(sel ? `「${sel.art.title}」 선택됨 · 끌어서 옮기거나 아래 버튼으로 조절하세요` : '작품을 누른 채 끌어서 옮기세요. 다른 벽으로도 옮길 수 있어요.');
+  }
+  function startEdit() {
+    if (!myCur()) return;
+    editing = true; bar.hidden = false; editBtn.textContent = '편집 끝내기'; document.body.classList.add('pfEditing');
+    undoS = []; redoS = []; fillStore(); refreshBar();
+    // 자동으로 걸린 작품의 자리를 고정해서, 다른 작품을 옮겨도 따라 움직이지 않게 한다.
+    myCur().hung.forEach(h => { if (!(h.art.placement && h.art.placement.wall)) save(h.art, clonePl(h.pl)); });
+  }
+  function stopEdit() { editing = false; select(null); bar.hidden = true; editBtn.textContent = '전시 편집'; document.body.classList.remove('pfEditing'); hideGuides(); }
+  editBtn.addEventListener('click', () => editing ? stopEdit() : startEdit());
+  function overlaps(e, pl) {
+    const a = artSize(e.art, pl.s), sg = myCur().sign;
+    if (sg && pl.wall === sg.wall && Math.abs(pl.x - sg.x) < (a.w + sg.w) / 2 + .05 && Math.abs(pl.y - sg.y) < (a.h + sg.h) / 2 + .05) return true;
+    return myCur().hung.some(o => o !== e && o.pl.wall === pl.wall && (() => { const b = artSize(o.art, o.pl.s); return Math.abs(o.pl.x - pl.x) < (a.w + b.w) / 2 + .1 && Math.abs(o.pl.y - pl.y) < (a.h + b.h) / 2 + .1; })());
+  }
+  function select(e) {
+    if (outline && outline.parent) outline.parent.remove(outline);
+    sel = e || null;
+    if (sel) {
+      const { w, h } = artSize(sel.art, 1);
+      outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w + .2, h + .2)), new THREE.LineBasicMaterial({ color: 0x7fd1ae, depthTest: false, transparent: true }));
+      outline.renderOrder = 10; outline.position.z = .05; sel.g.add(outline); paintOutline();
+    }
+    refreshBar();
+  }
+  function paintOutline() { if (outline && sel) outline.material.color.set(overlaps(sel, sel.pl) ? 0xff6a50 : 0x7fd1ae); }
+  function guides(surf, gx, gy, pl) {
+    const cur = myCur(); const mat = () => new THREE.MeshBasicMaterial({ color: 0x7fd1ae, transparent: true, opacity: .8, depthTest: false });
+    if (!guideV) { guideV = new THREE.Mesh(new THREE.PlaneGeometry(.025, 1), mat()); guideH = new THREE.Mesh(new THREE.PlaneGeometry(1, .025), mat()); guideV.renderOrder = guideH.renderOrder = 11; }
+    for (const m of [guideV, guideH]) if (m.parent !== cur.scene) cur.scene.add(m);
+    guideV.visible = gx; guideH.visible = gy;
+    if (gx) { guideV.scale.y = surf.h; guideV.position.copy(surf.center).addScaledVector(surf.right, pl.x).addScaledVector(surf.normal, .06); guideV.position.y = surf.h / 2; guideV.rotation.set(0, surf.ry, 0); }
+    if (gy) { guideH.scale.x = surf.len; guideH.position.copy(surf.center).addScaledVector(surf.normal, .06); guideH.position.y = pl.y; guideH.rotation.set(0, surf.ry, 0); }
+  }
+  function hideGuides() { if (guideV) { guideV.visible = guideH.visible = false; } }
+  // Snap the centre to the wall middle, eye level, and the line of other works on the same wall.
+  function snap(e, pl, surf) {
+    const others = myCur().hung.filter(o => o !== e && o.pl.wall === surf.id);
+    let gx = false, gy = false;
+    const xs = [0].concat(others.map(o => o.pl.x)), ys = [EYE].concat(others.map(o => o.pl.y));
+    for (const x of xs) if (Math.abs(pl.x - x) < SNAP) { pl.x = x; gx = true; break; }
+    for (const y of ys) if (Math.abs(pl.y - y) < SNAP) { pl.y = y; gy = true; break; }
+    if (!gx) pl.x = Math.round(pl.x * 20) / 20; if (!gy) pl.y = Math.round(pl.y * 20) / 20;
+    return { gx, gy };
+  }
+  function wallPoint(ndc) {
+    const cur = myCur(); if (!cur) return null;
+    edRay.setFromCamera(ndc, G.camera); edRay.far = 40;
+    const hit = edRay.intersectObjects(cur.walls, false)[0]; if (!hit) return null;
+    const sf = hit.object.userData.surface, rel = hit.point.clone().sub(sf.center);
+    return { surf: sf, x: rel.dot(sf.right), y: hit.point.y };
+  }
+  G.onPointerDown = ndc => {
+    if (!editing || placing || G.isPanelOpen()) return false;
+    const cur = myCur(); if (!cur) return false;
+    edRay.setFromCamera(ndc, G.camera); edRay.far = 30;
+    const hit = edRay.intersectObjects(cur.hung.map(h => h.pic), false)[0];
+    if (!hit) return false;
+    const e = cur.hung.find(h => h.pic === hit.object); select(e);
+    const wp = wallPoint(ndc);
+    dragE = { e, before: clonePl(e.pl), moved: false, offX: wp && wp.surf.id === e.surf.id ? e.pl.x - wp.x : 0, offY: wp ? e.pl.y - wp.y : 0, surfId: e.surf.id };
+    return true;
+  };
+  G.onPointerMove = ndc => {
+    if (!dragE) return;
+    const wp = wallPoint(ndc); if (!wp) return;
+    if (wp.surf.id !== dragE.surfId) { dragE.offX = 0; dragE.surfId = wp.surf.id; }
+    let pl = { wall: wp.surf.id, x: wp.x + dragE.offX, y: wp.y + dragE.offY, s: dragE.e.pl.s };
+    const g = snap(dragE.e, pl, wp.surf);
+    pl = clampPlacement(pl, wp.surf, dragE.e.art);
+    layoutEntry(dragE.e, wp.surf, pl, myCur().geo.h); dragE.moved = true;
+    guides(wp.surf, g.gx, g.gy, pl); paintOutline();
+    edMsg([wp.surf.label, g.gx ? '세로 줄 맞춤' : '', g.gy ? '높이 줄 맞춤' : '', overlaps(dragE.e, pl) ? '다른 작품이나 간판과 겹칩니다' : ''].filter(Boolean).join(' · '));
+  };
+  G.onPointerUp = () => {
+    if (!dragE) return; const d = dragE; dragE = null; hideGuides();
+    if (d.moved) commit(d.e.art, d.before, clonePl(d.e.pl));
+    refreshBar();
+  };
+  function save(art, pl) { art.placement = pl; return B.updateArtwork(art.id, { placement: pl }).catch(ex => G.toast('저장하지 못했습니다: ' + ex.message)); }
+  function commit(art, before, after) { undoS.push({ art, before, after }); if (undoS.length > 60) undoS.shift(); redoS = []; save(art, after); refreshBar(); }
+  // Apply a placement to a work: in place when it stays on a wall, otherwise rebuild the room.
+  async function applyPl(art, pl) {
+    const cur = myCur(); const e = cur && cur.hung.find(h => h.art.id === art.id);
+    const surf = pl && pl.wall && cur && cur.geo.surfaces.find(s => s.id === pl.wall);
+    save(art, pl);
+    if (e && surf) { layoutEntry(e, surf, clampPlacement(pl, surf, art), cur.geo.h); select(e); return; }
+    await reloadGallery(user.id); fillStore();
+    const nc = myCur(); select(nc && nc.hung.find(h => h.art.id === art.id));
+  }
+  function change(fn) { if (!sel) return; const before = clonePl(sel.pl); const pl = clampPlacement(fn(clonePl(sel.pl)), sel.surf, sel.art); layoutEntry(sel, sel.surf, pl, myCur().geo.h); paintOutline(); commit(sel.art, before, clonePl(pl)); }
+  const ED = {
+    smaller: () => change(pl => Object.assign(pl, { s: pl.s / 1.12 })),
+    bigger: () => change(pl => Object.assign(pl, { s: pl.s * 1.12 })),
+    center: () => change(pl => Object.assign(pl, { x: 0 })),
+    eye: () => change(pl => Object.assign(pl, { y: EYE })),
+    down: async () => { if (!sel) return; const art = sel.art, before = clonePl(sel.pl); select(null); undoS.push({ art, before, after: { stored: true } }); redoS = []; await applyPl(art, { stored: true }); G.toast(`「${art.title}」을(를) 보관함에 넣었습니다.`); refreshBar(); },
+    undo: async () => { const u = undoS.pop(); if (!u) return; redoS.push(u); await applyPl(u.art, u.before == null ? null : clonePl(u.before)); refreshBar(); },
+    redo: async () => { const u = redoS.pop(); if (!u) return; undoS.push(u); await applyPl(u.art, clonePl(u.after)); refreshBar(); },
+    done: () => stopEdit(),
+  };
+  bar.querySelectorAll('[data-ed]').forEach(b => b.addEventListener('click', () => ED[b.dataset.ed]()));
+  window.addEventListener('keydown', e => {
+    if (!editing || G.isPanelOpen() || /INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
+    const k = e.key;
+    if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? ED.redo() : ED.undo(); }
+    else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'y') { e.preventDefault(); ED.redo(); }
+    else if (k === '+' || k === '=') ED.bigger(); else if (k === '-') ED.smaller();
+    else if (k === 'Delete' || k === 'Backspace') ED.down();
+  });
+  (function watch() { requestAnimationFrame(watch); const mine = !!myCur(); editBtn.hidden = !mine; if (editing && !mine) stopEdit(); })();
 
   /* ---------------- artwork & purchase ---------------- */
   let buyTarget = null;
