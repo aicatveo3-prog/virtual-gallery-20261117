@@ -147,6 +147,17 @@ input, textarea, select { user-select: text; -webkit-user-select: text; }
 .pfStatus.s-accepted { color: #2f6b4f !important; } .pfStatus.s-declined, .pfStatus.s-cancelled { color: #8a3a2c !important; }
 .pfBtns { display: flex; gap: 6px; flex-wrap: wrap; }
 .pfGuest { display: grid; gap: 10px; border-top: 1px solid var(--paper-2); padding-top: 14px; }
+.pfForm select { font: 14px var(--body); padding: 8px; border-radius: 4px; border: 1px solid #cfc2a8; background: #fbf7ee; color: var(--text-on-paper); width: 100%; box-sizing: border-box; }
+.pfForm input[type=color] { padding: 2px !important; height: 38px; cursor: pointer; }
+.pfWalls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .pfWalls { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pfPresets { display: flex; flex-wrap: wrap; gap: 6px; }
+.pfPresets button { font: 12px var(--body); padding: 6px 10px; border-radius: 14px; border: 1px solid #cfc2a8; background: #fbf7ee; color: var(--text-on-paper); cursor: pointer; }
+.pfTag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: 1px; }
+.pfTag.on { background: #d6e7dd; color: #2f6b4f; } .pfTag.off { background: #eadfcc; color: #7a6a52; }
+#pfPlaceBar { position: fixed; left: 50%; transform: translateX(-50%); top: calc(64px + env(safe-area-inset-top, 0px)); z-index: 6; display: flex; align-items: center; gap: 12px; background: rgba(21,19,15,.88); color: var(--paper); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--celadon); font-size: 14px; max-width: calc(100% - 32px); box-sizing: border-box; }
+#pfPlaceBar span { min-width: 0; overflow-wrap: anywhere; }
+body.touch #pfPlaceBar { top: calc(160px + env(safe-area-inset-top, 0px)); }
 .pfGuest select { font: 14px var(--body); padding: 8px; border-radius: 4px; border: 1px solid #cfc2a8; background: #fbf7ee; color: var(--text-on-paper); max-width: 100%; }
 .btn.small { padding: 6px 10px; font-size: 12px; }
 @media (max-width: 560px) { .pfRow { grid-template-columns: 48px minmax(0, 1fr); } .pfRow img, .pfIcon { width: 48px; height: 48px; } .pfRow .pfCheck, .pfRow > .btn { grid-column: 2; justify-self: start; } }
@@ -215,6 +226,7 @@ input, textarea, select { user-select: text; -webkit-user-select: text; }
       <div class="actions">
         <button class="btn primary" id="enterWorldBtn" type="button">작품 속으로 들어가기</button>
         <button class="btn" id="buyBtn" type="button" disabled>구매하기 (준비 중)</button>
+        <button class="btn" id="pfTakeDownBtn" type="button" hidden>벽에서 내리기</button>
       </div>
       <div class="sale" id="artSale"></div>
     </div>
@@ -984,8 +996,10 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', e => {
   if (!drag) return; const wasDrag = drag.moved > 6; drag = null;
   if (wasDrag || panelOpen || !started) return;
+  const ndcUp = locked ? new THREE.Vector2(0, 0) : new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  if (G.onPointerPick && G.onPointerPick(ndcUp)) return;
   if (locked) { if (hovered) act(hovered.userData.action); return; }
-  const hit = pick(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1));
+  const hit = pick(ndcUp);
   if (hit) { act(hit.userData.action); return; }
   try { const r = el.requestPointerLock && el.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) { /* pointer lock unavailable: drag-to-look still works */ }
 });
@@ -1019,7 +1033,9 @@ if (isTouch) {
       else if (t.identifier === lookT.id) {
         lookT.id = null;
         if (Math.hypot(t.clientX - lookT.sx, t.clientY - lookT.sy) < 10 && performance.now() - lookT.t < 350) {
-          const hit = pick(new THREE.Vector2(t.clientX / innerWidth * 2 - 1, -(t.clientY / innerHeight) * 2 + 1)); if (hit) act(hit.userData.action);
+          const tn = new THREE.Vector2(t.clientX / innerWidth * 2 - 1, -(t.clientY / innerHeight) * 2 + 1);
+          if (G.onPointerPick && G.onPointerPick(tn)) continue;
+          const hit = pick(tn); if (hit) act(hit.userData.action);
         }
       }
     }
@@ -1060,7 +1076,7 @@ function openArt(id) {
   $('artTitle').textContent = a.title; $('artArtist').textContent = a.artist; $('artMedium').textContent = a.medium; $('artYear').textContent = a.year;
   $('artDesc').textContent = a.desc; $('artSale').textContent = a.sale;
   $('artEyebrow').textContent = a.world ? '작품 정보 · 들어갈 수 있는 작품' : '작품 정보';
-  $('enterWorldBtn').hidden = !a.world; $('buyBtn').hidden = !a.sale; $('buyBtn').disabled = true; $('buyBtn').textContent = '구매하기 (준비 중)'; $('buyBtn').onclick = null;
+  $('pfTakeDownBtn') && ($('pfTakeDownBtn').hidden = true); $('enterWorldBtn').hidden = !a.world; $('buyBtn').hidden = !a.sale; $('buyBtn').disabled = true; $('buyBtn').textContent = '구매하기 (준비 중)'; $('buyBtn').onclick = null;
   showPanel('artPanel');
 }
 $('enterWorldBtn').addEventListener('click', () => { const a = ARTS[artOpen]; if (a && a.world) go(a.world); });
@@ -1151,7 +1167,8 @@ Promise.race([fontLoads.catch(() => {}), new Promise(r => setTimeout(r, 3000))])
   go('1F', true); $('fade').classList.remove('on');
 });
 // show the hall behind the intro card
-Object.assign(G, { go, openArt, act, player, cache, BUILDERS, buildRoom, wallText, textTexture, mapPanelMesh, showPanel, closePanels, toast, isStarted: () => started, getCurId: () => curId });
+function refreshPlace(id) { delete cache[id]; if (curId === id) { cur = getPlace(id); } }
+Object.assign(G, { refreshPlace, camera, woodTexture, shadowAll, get envTex() { return envTex; }, getPointerNDC: () => locked ? new THREE.Vector2(0, 0) : mouseNDC.clone(), isPanelOpen: () => panelOpen, go, openArt, act, player, cache, BUILDERS, buildRoom, wallText, textTexture, mapPanelMesh, showPanel, closePanels, toast, isStarted: () => started, getCurId: () => curId });
 window.__gallery = G;
 frame();
 updateHelp();

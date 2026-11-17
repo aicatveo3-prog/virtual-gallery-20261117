@@ -49,6 +49,10 @@ create table if not exists public.orders (
   created_at timestamptz not null default now()
 );
 
+-- 방 구조(크기, 가벽, 벽마다 색, 마감, 바닥, 천장)와 작품을 건 자리
+alter table public.profiles add column if not exists layout jsonb;
+alter table public.artworks add column if not exists placement jsonb;
+
 alter table public.profiles enable row level security;
 alter table public.artworks enable row level security;
 alter table public.models enable row level security;
