@@ -41,6 +41,7 @@
     </div>
     <section data-pane="room" class="pfPane">
       <form id="pfRoomForm" class="pfForm">
+        <label>작가 이름<input id="pfDName" maxlength="30" required></label>
         <label>갤러리 이름<input id="pfGName" maxlength="40" required></label>
         <label>소개 (입구 벽에 걸림)<textarea id="pfGIntro" maxlength="160" rows="2"></textarea></label>
         <fieldset><legend>벽 색</legend><div class="swatches" id="pfWall"></div></fieldset>
@@ -51,6 +52,10 @@
         </div></fieldset>
         <div class="actions"><button class="btn primary" type="submit">저장하고 내 갤러리로 가기</button><button class="btn" type="button" id="pfLogout">로그아웃</button></div>
       </form>
+      <div class="pfGuest" id="pfGuestBox" hidden>
+        <p class="pfNotice">비회원 테스트 모드입니다. 가입 없이 쓰는 대신, 올린 내용은 이 브라우저 안에만 저장되고 다른 기기나 다른 사람에게는 보이지 않습니다. 구매 요청을 시험하려면 다른 손님으로 바꿔서 서로의 갤러리를 방문해 보세요.</p>
+        <div class="actions"><select id="pfGuestSel" aria-label="손님 고르기"></select><button class="btn" type="button" id="pfGuestSwitch">이 손님으로 바꾸기</button><button class="btn" type="button" id="pfGuestNew">새 손님 만들기</button></div>
+      </div>
     </section>
     <section data-pane="arts" class="pfPane" hidden>
       <form id="pfArtForm" class="pfForm grid2">
@@ -110,7 +115,7 @@
   $('hudButtons').insertBefore(accountBtn, $('mapBtn'));
   accountBtn.addEventListener('click', () => { if (!G.isStarted()) return; user ? openStudio('room') : openAuth('in'); });
 
-  const modeText = () => B && B.mode === 'local' ? '체험 모드 · 이 브라우저 안에만 저장됩니다' : '작품 속으로 · 플랫폼';
+  const modeText = () => B && B.mode === 'local' ? '비회원 테스트 모드 · 이 브라우저 안에만 저장됩니다' : '작품 속으로 · 플랫폼';
   function err(id, msg) { const e = $(id); e.textContent = msg || ''; e.hidden = !msg; }
   function busy(btn, on, label) { if (!btn) return; if (on) { btn.dataset.label = btn.textContent; btn.textContent = label || '처리 중…'; btn.disabled = true; } else { btn.textContent = btn.dataset.label || btn.textContent; btn.disabled = false; } }
 
@@ -161,7 +166,8 @@
 
   function fillRoom() {
     const p = profile || {};
-    $('pfGName').value = p.gallery_name || ''; $('pfGIntro').value = p.intro || '';
+    $('pfDName').value = p.display_name || user.name; $('pfGName').value = p.gallery_name || ''; $('pfGIntro').value = p.intro || '';
+    fillGuests();
     const w = $('pfWall'); w.innerHTML = '';
     WALLS.forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'swatch' + ((p.wall_color || WALLS[0]) === c ? ' on' : ''); b.style.background = c; b.setAttribute('aria-label', '벽 색 ' + c); b.dataset.c = c; b.addEventListener('click', () => { w.querySelectorAll('.swatch').forEach(x => x.classList.remove('on')); b.classList.add('on'); }); w.appendChild(b); });
     document.querySelectorAll('input[name=pfFloor]').forEach(r => { r.checked = r.value === (p.floor || 'wood'); });
@@ -171,10 +177,21 @@
     const sw = document.querySelector('#pfWall .swatch.on'); const fl = document.querySelector('input[name=pfFloor]:checked');
     const btn = e.submitter; busy(btn, true, '저장 중…');
     try {
-      profile = await B.saveProfile({ id: user.id, display_name: (profile && profile.display_name) || user.name, gallery_name: $('pfGName').value.trim() || user.name + '의 갤러리', intro: $('pfGIntro').value.trim(), wall_color: sw ? sw.dataset.c : WALLS[0], floor: fl ? fl.value : 'wood' });
+      const dn = $('pfDName').value.trim() || user.name; user.name = dn;
+      profile = await B.saveProfile({ id: user.id, display_name: dn, gallery_name: $('pfGName').value.trim() || user.name + '의 갤러리', intro: $('pfGIntro').value.trim(), wall_color: sw ? sw.dataset.c : WALLS[0], floor: fl ? fl.value : 'wood' });
       busy(btn, false); enterGallery(user.id);
     } catch (ex) { busy(btn, false); G.toast('저장하지 못했습니다: ' + ex.message); }
   });
+  const GUEST = () => B && B.mode === 'local';
+  async function fillGuests() {
+    $('pfGuestBox').hidden = !GUEST(); $('pfLogout').hidden = GUEST();
+    if (!GUEST()) return;
+    const gs = await B.listGuests(); const sel = $('pfGuestSel'); sel.innerHTML = '';
+    for (const g of gs) { const p = await B.getProfile(g.id); const o = document.createElement('option'); o.value = g.id; o.textContent = ((p && p.display_name) || g.name) + (g.id === user.id ? ' (지금)' : ''); o.selected = g.id === user.id; sel.appendChild(o); }
+  }
+  async function becomeGuest(u) { user = u; profile = await B.getProfile(user.id); refreshAccount(); G.closePanels(); G.toast(`${profile.display_name}(으)로 바꿨습니다.`); enterGallery(user.id); }
+  $('pfGuestSwitch').addEventListener('click', async () => { const id = $('pfGuestSel').value; if (id && id !== user.id) becomeGuest(await B.switchTo(id)); });
+  $('pfGuestNew').addEventListener('click', async () => becomeGuest(await B.guest()));
   $('pfLogout').addEventListener('click', async () => { await B.signOut(); user = null; profile = null; refreshAccount(); G.closePanels(); G.toast('로그아웃했습니다.'); });
 
   function imageSize(file) { return new Promise(res => { const u = URL.createObjectURL(file); const i = new Image(); i.onload = () => { res({ width: i.naturalWidth, height: i.naturalHeight }); URL.revokeObjectURL(u); }; i.onerror = () => { res(null); URL.revokeObjectURL(u); }; i.src = u; }); }
@@ -411,8 +428,10 @@
   window.GalleryBackend.then(async b => {
     B = b;
     try { user = await B.currentUser(); if (user) profile = await B.getProfile(user.id); } catch (e) { user = null; }
+    // 비회원 모드: 로그인 화면 없이 손님 계정을 바로 만든다.
+    if (!user && B.mode === 'local') { try { user = await B.guest(); profile = await B.getProfile(user.id); } catch (e) { user = null; } }
     refreshAccount();
     B.onAuthChange(async u => { user = u; profile = u ? await B.getProfile(u.id) : null; refreshAccount(); });
-    window.__platform = { backend: B, enterGallery, openStudio, openAuth, openDirectory, get user() { return user; } };
+    window.__platform = { becomeGuest, backend: B, enterGallery, openStudio, openAuth, openDirectory, get user() { return user; } };
   });
 })();

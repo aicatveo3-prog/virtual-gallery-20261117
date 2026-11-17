@@ -57,6 +57,16 @@
         const s = { id: u.id, email, name: u.name }; writeSession(s); return s;
       },
       async signOut() { writeSession(null); },
+      // 비회원(손님): 가입 없이 바로 쓰는 계정. 같은 브라우저 안에서만 유지된다.
+      async guest() {
+        const n = Math.floor(1000 + Math.random() * 9000), name = '손님 ' + n;
+        const u = { id: uid(), email: 'guest-' + n + '-' + Date.now() + '@guest.local', name, guest: true, created_at: now() };
+        await put('users', u);
+        await put('profiles', Object.assign({ id: u.id, display_name: name, created_at: now() }, DEFAULT_PROFILE, { gallery_name: name + '의 갤러리' }));
+        const s = { id: u.id, email: u.email, name, guest: true }; writeSession(s); return s;
+      },
+      async listGuests() { return (await all('users')).filter(u => u.guest).sort((a, b) => a.created_at.localeCompare(b.created_at)).map(u => ({ id: u.id, name: u.name })); },
+      async switchTo(id) { const u = await get('users', id); if (!u) throw new Error('손님을 찾을 수 없습니다.'); const p = await get('profiles', id); const s = { id: u.id, email: u.email, name: (p && p.display_name) || u.name, guest: !!u.guest }; writeSession(s); return s; },
       async getProfile(id) { return (await get('profiles', id)) || null; },
       async saveProfile(p) { const old = (await get('profiles', p.id)) || {}; const v = Object.assign({}, old, p); await put('profiles', v); return v; },
       async listGalleries() { const ps = await all('profiles'); const arts = await all('artworks'); return ps.map(p => Object.assign({}, p, { artwork_count: arts.filter(a => a.owner === p.id).length })).sort((a, b) => b.artwork_count - a.artwork_count); },

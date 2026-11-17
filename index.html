@@ -146,6 +146,8 @@ input, textarea, select { user-select: text; -webkit-user-select: text; }
 .pfStatus { font-weight: 700; }
 .pfStatus.s-accepted { color: #2f6b4f !important; } .pfStatus.s-declined, .pfStatus.s-cancelled { color: #8a3a2c !important; }
 .pfBtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.pfGuest { display: grid; gap: 10px; border-top: 1px solid var(--paper-2); padding-top: 14px; }
+.pfGuest select { font: 14px var(--body); padding: 8px; border-radius: 4px; border: 1px solid #cfc2a8; background: #fbf7ee; color: var(--text-on-paper); max-width: 100%; }
 .btn.small { padding: 6px 10px; font-size: 12px; }
 @media (max-width: 560px) { .pfRow { grid-template-columns: 48px minmax(0, 1fr); } .pfRow img, .pfIcon { width: 48px; height: 48px; } .pfRow .pfCheck, .pfRow > .btn { grid-column: 2; justify-self: start; } }
 #keypad .sheet { padding: 24px; width: min(320px, 100%); display: grid; gap: 14px; }

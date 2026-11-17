@@ -28,7 +28,7 @@ GitHub Pages 주소로 접속하거나, 로컬에서는 `python3 -m http.server`
 
 ### 저장 방식
 
-- `js/config.js`가 비어 있으면 **체험 모드**: 데이터가 그 브라우저(IndexedDB) 안에만 저장되어 다른 사람에게 보이지 않습니다.
+- `js/config.js`가 비어 있으면 **비회원 테스트 모드**: 가입 없이 손님 계정이 자동으로 만들어지고 (다른 손님으로 바꿔 구매 요청 시험 가능), 데이터가 그 브라우저(IndexedDB) 안에만 저장되어 다른 사람에게 보이지 않습니다.
 - Supabase를 연결하면 모든 방문자가 서로의 갤러리를 볼 수 있습니다.
   1. supabase.com에서 새 프로젝트를 만듭니다 (무료 요금제).
   2. SQL Editor에 `supabase/schema.sql`을 붙여 넣고 Run.
