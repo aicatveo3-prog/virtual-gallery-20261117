@@ -48,7 +48,7 @@
         <div class="pfForm grid2">
           <label>방 크기와 모양<select id="pfSize"></select></label>
           <label>천장 높이<select id="pfHeight"></select></label>
-          <label>가벽 (작품을 더 걸 수 있는 칸막이)<select id="pfPart"></select></label>
+          <label>가벽 (작품을 더 걸 수 있는 칸막이 · ㄱ자/십자형 방은 없음)<select id="pfPart"></select></label>
           <label>벽 무늬 (모든 벽 기본값)<select id="pfFinish"></select></label>
           <label>바닥 재질과 무늬<select id="pfFloorSel"></select></label>
           <label>바닥 색 입히기 (흰색이면 원래 색)<input type="color" id="pfFloorTint"></label>
@@ -348,7 +348,12 @@
   }
 
   /* ---------------- user gallery scene ---------------- */
-  const SIZES = { small: { w: 10, d: 10, label: '작은 방 (10×10m)' }, standard: { w: 16, d: 16, label: '기본 전시실 (16×16m)' }, hall: { w: 24, d: 18, label: '넓은 홀 (24×18m)' }, corridor: { w: 10, d: 28, label: '긴 회랑 (10×28m)' } };
+  const SIZES = {
+    small: { w: 10, d: 10, label: '네모 · 작은 방 (10×10m)' }, standard: { w: 16, d: 16, label: '네모 · 기본 전시실 (16×16m)' }, hall: { w: 24, d: 18, label: '네모 · 넓은 홀 (24×18m)' }, corridor: { w: 10, d: 28, label: '네모 · 긴 회랑 (10×28m)' },
+    round: { shape: 'round', r: 8, label: '원형 · 둥근 방 (지름 16m)' }, rotunda: { shape: 'round', r: 12, label: '원형 · 큰 원형 홀 (지름 24m)' },
+    octagon: { shape: 'poly', n: 8, r: 9, label: '팔각형 (지름 18m)' }, hexagon: { shape: 'poly', n: 6, r: 9, label: '육각형 (지름 18m)' },
+    lshape: { shape: 'L', w: 20, d: 20, label: 'ㄱ자 방 (20×20m)' }, cross: { shape: 'cross', w: 24, d: 24, label: '십자형 방 (24×24m)' },
+  };
   const HEIGHTS = { 3.6: '낮은 천장 3.6m', 5: '보통 5m', 7: '높은 천장 7m' };
   const PARTS = { none: '가벽 없음', center: '가운데 가벽 1개', two: '양쪽 가벽 2개', three: '가벽 3개 (지그재그)' };
   const FLOORS = { wood: '원목', herring: '헤링본 원목', dark: '어두운 마루', stone: '밝은 석재', checker: '체크 대리석', terrazzo: '테라조', tile: '흰 타일', concrete: '콘크리트', carpet: '붉은 카펫', grass: '잔디' };
@@ -419,21 +424,58 @@
   function isDark(hex) { const n = parseInt(hex.slice(1), 16); return ((n >> 16 & 255) * .3 + (n >> 8 & 255) * .59 + (n & 255) * .11) < 110; }
 
   // Every hangable surface: id, centre on the floor line, right/normal vectors, length and height.
+  // Floor outline of the room as [x, z] points; rectangles keep wall ids n/e/s/w.
+  function outlineFor(L) {
+    const S = SIZES[L.size];
+    if (!S.shape) { const w = S.w / 2, d = S.d / 2; return { pts: [[-w, -d], [w, -d], [w, d], [-w, d]], ids: ['n', 'e', 's', 'w'] }; }
+    if (S.shape === 'round' || S.shape === 'poly') {
+      const n = S.shape === 'round' ? Math.max(12, Math.round(2 * Math.PI * S.r / 3)) : S.n, pts = [];
+      const off = S.shape === 'poly' ? Math.PI / n : 0;
+      for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + off + i * 2 * Math.PI / n - (S.shape === 'round' ? Math.PI / n : 0); pts.push([Math.cos(a) * S.r, Math.sin(a) * S.r]); }
+      return { pts };
+    }
+    if (S.shape === 'L') { const w = S.w / 2, d = S.d / 2; return { pts: [[-w, -d], [0, -d], [0, 0], [w, 0], [w, d], [-w, d]] }; }
+    const w = S.w / 2, d = S.d / 2, a = S.w / 6; // cross
+    return { pts: [[-a, -d], [a, -d], [a, -a], [w, -a], [w, a], [a, a], [a, d], [-a, d], [-a, a], [-w, a], [-w, -a], [-a, -a]] };
+  }
+  function insidePoly(pts, x, z) { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; }
+  const DIRS = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
+  // Every hangable surface: id, centre on the floor line, right/normal vectors, length and height.
   function surfacesFor(L) {
-    const { w, d } = SIZES[L.size], h = L.height, ph = Math.min(h - .6, 3.6), out = [];
-    const mk = (id, cx, cz, ry, len, hh, label, color) => out.push({ id, center: new THREE.Vector3(cx, 0, cz), ry, right: new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry)), normal: new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry)), len, h: hh, label, color });
-    mk('n', 0, -d / 2, 0, w, h, WALL_IDS.n, L.walls.n); mk('w', -w / 2, 0, Math.PI / 2, d, h, WALL_IDS.w, L.walls.w);
-    mk('e', w / 2, 0, -Math.PI / 2, d, h, WALL_IDS.e, L.walls.e); mk('s', 0, d / 2, Math.PI, w, h, WALL_IDS.s, L.walls.s);
+    const S = SIZES[L.size], h = L.height, ph = Math.min(h - .6, 3.6), out = [];
+    const ol = outlineFor(L), pts = ol.pts;
+    const xs = pts.map(q => q[0]), zs = pts.map(q => q[1]);
+    const w = Math.max(...xs) - Math.min(...xs), d = Math.max(...zs) - Math.min(...zs);
+    const mk = (id, cx, cz, ry, len, hh, label, color, key) => out.push({ id, key, center: new THREE.Vector3(cx, 0, cz), ry, right: new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry)), normal: new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry)), len, h: hh, label, color });
+    let area = 0; for (let i = 0; i < pts.length; i++) { const [x1, z1] = pts[i], [x2, z2] = pts[(i + 1) % pts.length]; area += x1 * z2 - x2 * z1; }
+    const dirCount = {};
+    pts.forEach((a, i) => {
+      const b = pts[(i + 1) % pts.length], ex = b[0] - a[0], ez = b[1] - a[1], len = Math.hypot(ex, ez);
+      let nx = -ez / len, nz = ex / len; if (area < 0) { nx = -nx; nz = -nz; }
+      const ry = Math.atan2(nx, nz), cx = (a[0] + b[0]) / 2, cz = (a[1] + b[1]) / 2;
+      const key = Math.abs(nx) > Math.abs(nz) ? (nx < 0 ? 'e' : 'w') : (nz > 0 ? 'n' : 's');
+      const dir = DIRS[(Math.round(Math.atan2(-nx, nz) / (Math.PI / 4)) + 8) % 8];
+      dirCount[dir] = (dirCount[dir] || 0) + 1;
+      const id = ol.ids ? ol.ids[i] : 'f' + i;
+      const label = ol.ids ? WALL_IDS[id] : `${dir}쪽 벽${pts.length > 8 ? ' ' + dirCount[dir] : ''}`;
+      mk(id, cx, cz, ry, len, h, label, L.walls[key], key);
+    });
     const panels = [];
-    if (L.partition === 'center') panels.push({ x: 0, z: 0, len: Math.min(8, w * .5), along: 'x' });
-    if (L.partition === 'two') { const len = Math.min(7, d * .4); panels.push({ x: -w / 4, z: 0, len, along: 'z' }, { x: w / 4, z: 0, len, along: 'z' }); }
-    if (L.partition === 'three') { const len = Math.min(6, w * .42); panels.push({ x: -w * .18, z: -d * .22, len, along: 'x' }, { x: w * .18, z: 0, len, along: 'x' }, { x: -w * .18, z: d * .22 - 1, len, along: 'x' }); }
+    if (S.shape !== 'L' && S.shape !== 'cross') {
+      if (L.partition === 'center') panels.push({ x: 0, z: 0, len: Math.min(8, w * .5), along: 'x' });
+      if (L.partition === 'two') { const len = Math.min(7, d * .4); panels.push({ x: -w / 4, z: 0, len, along: 'z' }, { x: w / 4, z: 0, len, along: 'z' }); }
+      if (L.partition === 'three') { const len = Math.min(6, w * .42); panels.push({ x: -w * .18, z: -d * .22, len, along: 'x' }, { x: w * .18, z: 0, len, along: 'x' }, { x: -w * .18, z: d * .22 - 1, len, along: 'x' }); }
+    }
     panels.forEach((pn, i) => {
       const t = .15;
-      if (pn.along === 'x') { mk(`p${i}a`, pn.x, pn.z + t, 0, pn.len, ph, `가벽 ${i + 1} 앞면`, L.walls.p); mk(`p${i}b`, pn.x, pn.z - t, Math.PI, pn.len, ph, `가벽 ${i + 1} 뒷면`, L.walls.p); }
-      else { mk(`p${i}a`, pn.x + t, pn.z, Math.PI / 2, pn.len, ph, `가벽 ${i + 1} 오른쪽 면`, L.walls.p); mk(`p${i}b`, pn.x - t, pn.z, -Math.PI / 2, pn.len, ph, `가벽 ${i + 1} 왼쪽 면`, L.walls.p); }
+      if (pn.along === 'x') { mk(`p${i}a`, pn.x, pn.z + t, 0, pn.len, ph, `가벽 ${i + 1} 앞면`, L.walls.p, 'p'); mk(`p${i}b`, pn.x, pn.z - t, Math.PI, pn.len, ph, `가벽 ${i + 1} 뒷면`, L.walls.p, 'p'); }
+      else { mk(`p${i}a`, pn.x + t, pn.z, Math.PI / 2, pn.len, ph, `가벽 ${i + 1} 오른쪽 면`, L.walls.p, 'p'); mk(`p${i}b`, pn.x - t, pn.z, -Math.PI / 2, pn.len, ph, `가벽 ${i + 1} 왼쪽 면`, L.walls.p, 'p'); }
     });
-    return { w, d, h, ph, surfaces: out, panels };
+    const walls = out.filter(x => x.id[0] !== 'p');
+    const south = walls.reduce((m, x) => x.center.z > m.center.z ? x : m), north = walls.reduce((m, x) => x.center.z < m.center.z ? x : m);
+    const kiosk = { wall: south.id, x: S.shape ? 0 : -(w / 2 - 1.4) };
+    const spawnZ = S.shape === 'L' ? d / 2 - 2.2 : Math.max(...zs) - 2.2;
+    return { w, d, h, ph, surfaces: out, panels, pts, inside: (x, z) => insidePoly(pts, x, z), kiosk, north, south, spawn: [0, spawnZ] };
   }
   const SC_MIN = .35, SC_MAX = 2.6;
   // Base size fits 1.5×1.3m; placement.s scales it.
@@ -449,8 +491,10 @@
   function autoPlace(arts, geo) {
     const valid = pl => pl && pl.wall && geo.surfaces.some(s => s.id === pl.wall);
     const taken = arts.filter(a => valid(a.placement)).map(a => a.placement);
-    const kioskX = geo.w / 2 - 1.4;
-    const order = ['n', 'w', 'e'].concat(geo.surfaces.filter(s => s.id[0] === 'p').map(s => s.id), ['s']);
+    const outer = geo.surfaces.filter(s => s.id[0] !== 'p'), ang = s => (Math.atan2(s.center.x, -s.center.z) + 2 * Math.PI) % (2 * Math.PI);
+    const rank = s => s.id === geo.kiosk.wall ? 9 : (s.key === 'n' ? 0 : s.key === 's' ? 3 : 1);
+    const order = outer.slice().sort((a, b) => rank(a) - rank(b) || ang(a) - ang(b)).map(s => s.id);
+    order.splice(order.length - 1, 0, ...geo.surfaces.filter(s => s.id[0] === 'p').map(s => s.id));
     const out = {};
     for (const a of arts) {
       if (valid(a.placement) || (a.placement && a.placement.stored)) continue;
@@ -458,8 +502,10 @@
       for (const id of order) {
         const surf = geo.surfaces.find(s => s.id === id); if (!surf) continue;
         const y = Math.min(2.0, surf.h / 2 + .2);
-        for (let x = -surf.len / 2 + 1.7; x <= surf.len / 2 - 1.7 + 1e-6; x += 2.9) {
-          if (id === 's' && Math.abs(-x - kioskX) < 2.2) continue;
+        const xs = surf.len >= 3.4 ? [] : (surf.len >= 1.8 ? [0] : []);
+        for (let x = -surf.len / 2 + 1.7; x <= surf.len / 2 - 1.7 + 1e-6; x += 2.9) xs.push(x);
+        for (const x of xs) {
+          if (id === geo.kiosk.wall && Math.abs(x - geo.kiosk.x) < 2.2) continue;
           if (taken.some(t => t.wall === id && Math.abs(t.x - x) < 2.6)) continue;
           spot = { wall: id, x, y }; break;
         }
@@ -486,10 +532,13 @@
     const s = new THREE.Scene(); s.background = new THREE.Color(0x15130f); s.environment = G.envTex;
     const place = { scene: s, inter: [], reach: 9, updates: [], walls: [] };
     // floor, ceiling
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: floorTexture(L.floor, w, d), color: new THREE.Color(L.floorTint), roughness: ['carpet', 'grass'].includes(L.floor) ? 1 : (['checker', 'tile'].includes(L.floor) ? .25 : .42) }));
+    // Shape geometry UVs are in metres, so texture repeats are divided by the room size.
+    const shapeGeo = flip => new THREE.ShapeGeometry(new THREE.Shape(geo.pts.map(([x, z]) => new THREE.Vector2(x, flip ? -z : z))));
+    const perM = t => { if (t) t.repeat.set(t.repeat.x / w, t.repeat.y / d); return t; };
+    const floor = new THREE.Mesh(shapeGeo(true), new THREE.MeshStandardMaterial({ map: perM(floorTexture(L.floor, w, d)), color: new THREE.Color(L.floorTint), roughness: ['carpet', 'grass'].includes(L.floor) ? 1 : (['checker', 'tile'].includes(L.floor) ? .25 : .42) }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; s.add(floor);
-    const ceilMat = L.ceiling === 'wood' ? new THREE.MeshStandardMaterial({ map: (() => { const t = G.woodTexture(); t.repeat.set(w / 3, d / 3); return t; })(), roughness: .8 }) : new THREE.MeshStandardMaterial({ color: L.ceiling === 'dark' ? 0x24211e : 0xf2efe8, roughness: 1 });
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ceilMat); ceil.rotation.x = Math.PI / 2; ceil.position.y = h; s.add(ceil);
+    const ceilMat = L.ceiling === 'wood' ? new THREE.MeshStandardMaterial({ map: (() => { const t = G.woodTexture(); t.repeat.set(1 / 3, 1 / 3); return t; })(), roughness: .8, side: THREE.DoubleSide }) : new THREE.MeshStandardMaterial({ color: L.ceiling === 'dark' ? 0x24211e : 0xf2efe8, roughness: 1, side: THREE.DoubleSide });
+    const ceil = new THREE.Mesh(shapeGeo(false), ceilMat); ceil.rotation.x = Math.PI / 2; ceil.position.y = h; s.add(ceil);
     // walls (outer)
     geo.surfaces.forEach(sf => {
       const isPanel = sf.id[0] === 'p';
@@ -508,14 +557,20 @@
     s.add(new THREE.HemisphereLight(mood, 0x3a2f24, .42 * br)); s.add(new THREE.AmbientLight(mood, .08 * br));
     const strip = new THREE.MeshBasicMaterial({ color: mood });
     if (L.light.strips)
-    for (let x = -w / 2 + 3; x < w / 2 - 1; x += Math.max(3, w / 4)) { const m = new THREE.Mesh(new THREE.BoxGeometry(.14, .04, d * .8), strip); m.position.set(x, h - .03, 0); s.add(m); }
+    for (let x = -w / 2 + 3; x < w / 2 - 1; x += Math.max(3, w / 4)) {
+      // strips follow the room outline: one per stretch of ceiling that this line crosses
+      const cuts = []; geo.pts.forEach((a, i) => { const b = geo.pts[(i + 1) % geo.pts.length]; if ((a[0] > x) !== (b[0] > x)) cuts.push(a[1] + (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0])); });
+      cuts.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < cuts.length; k += 2) { const len = (cuts[k + 1] - cuts[k]) * .85; if (len < 1) continue; const m = new THREE.Mesh(new THREE.BoxGeometry(.14, .04, len), strip); m.position.set(x, h - .03, (cuts[k] + cuts[k + 1]) / 2); s.add(m); }
+    }
     const fill = new THREE.PointLight(mood, .35 * br, Math.max(w, d) * 1.4); fill.position.set(0, h - .5, 0); s.add(fill);
     // sign + map kiosk
     const signBg = isDark(L.walls.n) ? '#f1e8d6' : '#221f19', signFg = isDark(L.walls.n) ? '#2b241b' : '#f1e8d6';
-    const signW = Math.min(5.2, w * .5);
-    place.sign = { wall: 'n', x: 0, y: h - .5 - signW * 300 / 1600 / 2, w: signW, h: signW * 300 / 1600 };
-    G.wallText(s, [p.gallery_name || p.display_name, p.intro || `${p.display_name} 작가의 갤러리`], 0, place.sign.y, -d / 2 + .02, 0, signW, { w: 1600, h: 300, title: 92, body: 40, bg: signBg, fg: signFg, pad: 50 });
-    G.mapPanelMesh(s, place.inter, w / 2 - 1.4, d / 2 - .02, Math.PI);
+    const N = geo.north, signW = Math.min(5.2, w * .5, N.len * .9);
+    place.sign = { wall: N.id, x: 0, y: h - .5 - signW * 300 / 1600 / 2, w: signW, h: signW * 300 / 1600 };
+    const sp0 = N.center.clone().addScaledVector(N.normal, .02);
+    G.wallText(s, [p.gallery_name || p.display_name, p.intro || `${p.display_name} 작가의 갤러리`], sp0.x, place.sign.y, sp0.z, N.ry, signW, { w: 1600, h: 300, title: 92, body: 40, bg: signBg, fg: signFg, pad: 50 });
+    { const K = geo.surfaces.find(x => x.id === geo.kiosk.wall), kp = K.center.clone().addScaledVector(K.right, geo.kiosk.x).addScaledVector(K.normal, .02); G.mapPanelMesh(s, place.inter, kp.x, kp.z, K.ry); }
     // artworks
     const pls = resolvePlacements(arts, geo);
     const loader = new THREE.TextureLoader();
@@ -543,11 +598,12 @@
     place.layout = L;
     if (!place.hung.length) {
       const msg = own ? ['아직 걸린 작품이 없습니다', '「내 갤러리 관리 > 작품」에서 올리거나', '「벽에 걸기」를 누르고 벽을 클릭하세요.'] : ['아직 걸린 작품이 없습니다', '작가가 작품을 준비하고 있어요.'];
-      G.wallText(s, msg, 0, Math.min(2.1, h / 2), -d / 2 + .03, 0, Math.min(3.6, w * .4), { title: 64, body: 34 });
+      const mp = geo.north.center.clone().addScaledVector(geo.north.normal, .03);
+      G.wallText(s, msg, mp.x, Math.min(2.1, h / 2), mp.z, geo.north.ry, Math.min(3.6, w * .4, geo.north.len * .95), { title: 64, body: 34 });
     }
     // models on pedestals, avoiding partitions
     const blocked = (x, z) => geo.panels.some(pn => (pn.along === 'x' ? Math.abs(x - pn.x) < pn.len / 2 + 1 && Math.abs(z - pn.z) < 1.3 : Math.abs(z - pn.z) < pn.len / 2 + 1 && Math.abs(x - pn.x) < 1.3));
-    const cands = [[-w / 4, -d / 4], [w / 4, -d / 4], [-w / 4, d / 4 - 1], [w / 4, d / 4 - 1], [0, -d / 4], [0, d / 4 - 1], [-w / 3, 0], [w / 3, 0]].filter(([x, z]) => !blocked(x, z));
+    const cands = [[-w / 4, -d / 4], [w / 4, -d / 4], [-w / 4, d / 4 - 1], [w / 4, d / 4 - 1], [0, -d / 4], [0, d / 4 - 1], [-w / 3, 0], [w / 3, 0]].filter(([x, z]) => !blocked(x, z) && geo.inside(x, z) && geo.inside(x + 1.2, z) && geo.inside(x - 1.2, z) && geo.inside(x, z + 1.2) && geo.inside(x, z - 1.2));
     const gl = THREE.GLTFLoader ? new THREE.GLTFLoader() : null;
     const pedMat = new THREE.MeshStandardMaterial({ color: 0xf4efe6, roughness: .9 });
     models.slice(0, Math.min(MAX_MODELS, cands.length)).forEach((m, i) => {
@@ -566,15 +622,25 @@
       }, undefined, () => { G.wallText(s, ['모델을 불러오지 못했습니다', m.name], x, 1.2, z + .56, 0, .9, { w: 768, h: 256, title: 44, body: 30, pad: 40 }); });
       const pl = new THREE.PointLight(0xfff0d8, .5, 5); pl.position.set(x, Math.min(3.2, h - .3), z + 1); s.add(pl);
     });
+    let lastOk = new THREE.Vector3(geo.spawn[0], G.player.eye, geo.spawn[1]);
     place.clamp = q => {
-      q.x = Math.max(-w / 2 + .5, Math.min(w / 2 - .5, q.x)); q.z = Math.max(-d / 2 + .5, Math.min(d / 2 - .5, q.z)); q.y = G.player.eye;
+      q.y = G.player.eye;
+      // keep half a metre from every outer wall, and never leave the room outline
+      geo.pts.forEach((a, i) => {
+        const b = geo.pts[(i + 1) % geo.pts.length], ex = b[0] - a[0], ez = b[1] - a[1], l2 = ex * ex + ez * ez;
+        const t = Math.max(0, Math.min(1, ((q.x - a[0]) * ex + (q.z - a[1]) * ez) / l2)), cx = a[0] + ex * t, cz = a[1] + ez * t;
+        const dx = q.x - cx, dz = q.z - cz, dd = Math.hypot(dx, dz);
+        if (dd < .5 && dd > 1e-6 && geo.inside(q.x, q.z)) { q.x = cx + dx / dd * .5; q.z = cz + dz / dd * .5; }
+      });
+      if (!geo.inside(q.x, q.z)) { q.x = lastOk.x; q.z = lastOk.z; }
       for (const pn of geo.panels) {
         const hx = (pn.along === 'x' ? pn.len / 2 : .14) + .4, hz = (pn.along === 'x' ? .14 : pn.len / 2) + .4;
         const dx = q.x - pn.x, dz = q.z - pn.z;
         if (Math.abs(dx) < hx && Math.abs(dz) < hz) { if (hx - Math.abs(dx) < hz - Math.abs(dz)) q.x = pn.x + Math.sign(dx || 1) * hx; else q.z = pn.z + Math.sign(dz || 1) * hz; }
       }
+      if (geo.inside(q.x, q.z)) lastOk.set(q.x, q.y, q.z); else { q.x = lastOk.x; q.z = lastOk.z; }
     };
-    place.spawn = { pos: [0, 0, d / 2 - 2.2], yaw: 0 };
+    place.spawn = { pos: [geo.spawn[0], 0, geo.spawn[1]], yaw: 0 };
     place.name = [own ? '내 갤러리' : '작가 갤러리', p.gallery_name || p.display_name];
     place.ownerId = p.id; place.geo = geo;
     return place;
@@ -794,7 +860,7 @@
     selectLamp(selIdx != null ? myCur().lamps[selIdx] : null);
   }
   function floorAt(ndc, y) { edRay.setFromCamera(ndc, G.camera); const pt = new THREE.Vector3(); return edRay.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), pt) ? pt : null; }
-  function clampXZ(pt) { const g = myCur().geo; pt.x = Math.max(-g.w / 2 + .5, Math.min(g.w / 2 - .5, pt.x)); pt.z = Math.max(-g.d / 2 + .5, Math.min(g.d / 2 - .5, pt.z)); return pt; }
+  function clampXZ(pt, from) { const g = myCur().geo; pt.x = Math.max(-g.w / 2 + .5, Math.min(g.w / 2 - .5, pt.x)); pt.z = Math.max(-g.d / 2 + .5, Math.min(g.d / 2 - .5, pt.z)); if (!g.inside(pt.x, pt.z)) { if (from) { pt.x = from.x; pt.z = from.z; } else return null; } return pt; }
   G.onPointerDown = ndc => {
     if (!editing || placing || G.isPanelOpen()) return false;
     const cur = myCur(); if (!cur) return false;
@@ -802,7 +868,7 @@
       const pt = floorAt(ndc, 0); addingLamp = false;
       if (!pt) { refreshBar(); return true; }
       if (cur.lamps.length >= 10) { G.toast('전등은 10개까지 달 수 있어요.'); refreshBar(); return true; }
-      clampXZ(pt); const before = lampsOf(); const list = before.concat([{ x: Math.round(pt.x * 10) / 10, z: Math.round(pt.z * 10) / 10, y: null, color: '#ffd9a0', k: 1 }]);
+      if (!clampXZ(pt)) { G.toast('방 안쪽 바닥을 눌러 주세요.'); refreshBar(); return true; } const before = lampsOf(); const list = before.concat([{ x: Math.round(pt.x * 10) / 10, z: Math.round(pt.z * 10) / 10, y: null, color: '#ffd9a0', k: 1 }]);
       undoS.push({ lamps: true, before, after: list }); redoS = []; applyLamps(list, list.length - 1); return true;
     }
     edRay.setFromCamera(ndc, G.camera); edRay.far = 40;
@@ -817,7 +883,7 @@
     return true;
   };
   G.onPointerMove = ndc => {
-    if (dragL) { const pt = floorAt(ndc, dragL.y); if (!pt) return; pt.x += dragL.off.x; pt.z += dragL.off.z; clampXZ(pt); dragL.Lm.lp.x = Math.round(pt.x * 20) / 20; dragL.Lm.lp.z = Math.round(pt.z * 20) / 20; placeLamp(dragL.Lm); dragL.moved = true; edMsg('전등을 옮기는 중'); return; }
+    if (dragL) { const pt = floorAt(ndc, dragL.y); if (!pt) return; pt.x += dragL.off.x; pt.z += dragL.off.z; clampXZ(pt, dragL.Lm.lp); dragL.Lm.lp.x = Math.round(pt.x * 20) / 20; dragL.Lm.lp.z = Math.round(pt.z * 20) / 20; placeLamp(dragL.Lm); dragL.moved = true; edMsg('전등을 옮기는 중'); return; }
     if (!dragE) return;
     const wp = wallPoint(ndc); if (!wp) return;
     if (wp.surf.id !== dragE.surfId) { dragE.offX = 0; dragE.surfId = wp.surf.id; }
