@@ -50,7 +50,7 @@ body { background: var(--ink); color: var(--paper); font-family: var(--body); ov
 #cross.on { width: 14px; height: 14px; margin: -7px 0 0 -7px; background: transparent; border: 2px solid var(--paper); opacity: 1; }
 #hint { position: fixed; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); z-index: 4; pointer-events: none; font-size: 13px; background: rgba(21,19,15,.72); border: 1px solid var(--line); padding: 6px 10px; border-radius: 4px; white-space: nowrap; }
 #help { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 4; font-size: 12px; color: var(--paper-2); background: rgba(21,19,15,.55); padding: 6px 12px; border-radius: 4px; pointer-events: none; text-align: center; max-width: calc(100% - 32px); }
-body.touch #help { bottom: auto; top: calc(70px + env(safe-area-inset-top, 0px)); }
+body.touch #help { bottom: auto; top: calc(116px + env(safe-area-inset-top, 0px)); }
 #help kbd { font-family: var(--body); font-size: 11px; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 
 #fade { position: fixed; inset: 0; background: var(--ink); opacity: 0; pointer-events: none; transition: opacity .45s ease; z-index: 8; }
@@ -105,6 +105,49 @@ body.touch #help { bottom: auto; top: calc(70px + env(safe-area-inset-top, 0px))
 .placeBtn span { font-size: 12px; color: var(--muted-on-paper); }
 .placeBtn.here { border-color: var(--celadon); background: #e9f0ea; }
 
+/* platform panels */
+input, textarea, select { user-select: text; -webkit-user-select: text; }
+.pfSheet { padding: 26px; display: grid; gap: 14px; width: min(520px, 100%); }
+.pfSheet.wide { width: min(780px, 100%); }
+.pfTabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--paper-2); padding-bottom: 8px; }
+.pfTab { font: 500 13px var(--body); padding: 7px 12px; border-radius: 4px; border: 1px solid transparent; background: transparent; cursor: pointer; color: var(--muted-on-paper); }
+.pfTab.on { background: var(--text-on-paper); color: var(--paper); }
+.pfTab:focus-visible { outline: 2px solid var(--cinnabar); }
+.pfForm { display: grid; gap: 12px; }
+.pfForm.grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pfForm .span2 { grid-column: 1 / -1; }
+@media (max-width: 560px) { .pfForm.grid2 { grid-template-columns: 1fr; } }
+.pfForm label { display: grid; gap: 5px; font-size: 13px; color: var(--muted-on-paper); min-width: 0; }
+.pfForm input:not([type=checkbox]):not([type=radio]), .pfForm textarea { font: 15px var(--body); color: var(--text-on-paper); background: #fbf7ee; border: 1px solid #cfc2a8; border-radius: 4px; padding: 9px 10px; width: 100%; box-sizing: border-box; }
+.pfForm input:focus-visible, .pfForm textarea:focus-visible { outline: 2px solid var(--celadon); border-color: var(--celadon); }
+.pfForm fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.pfForm legend { font-size: 13px; color: var(--muted-on-paper); padding: 0; margin-bottom: 6px; }
+.pfCheck { display: flex !important; align-items: center; gap: 8px; grid-template-columns: none; color: var(--text-on-paper) !important; }
+.pfCheck.small { font-size: 12px; white-space: nowrap; }
+.pfChoice { display: flex; flex-wrap: wrap; gap: 14px; }
+.pfChoice label { display: flex; align-items: center; gap: 6px; color: var(--text-on-paper); }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(43,36,27,.25); cursor: pointer; }
+.swatch.on { border-color: var(--text-on-paper); box-shadow: 0 0 0 3px var(--paper), 0 0 0 5px var(--text-on-paper); }
+.pfErr { margin: 0; color: #a3301f; font-size: 13px; }
+.pfNote { font-size: 12px; color: var(--muted-on-paper); }
+.pfLead { margin: 0; color: var(--muted-on-paper); }
+.pfNotice { margin: 0; font-size: 13px; line-height: 1.6; background: #efe3cc; border-left: 3px solid var(--cinnabar); padding: 10px 12px; border-radius: 2px; }
+.pfEmpty { margin: 0; color: var(--muted-on-paper); font-size: 14px; padding: 8px 0; }
+.pfList { display: grid; gap: 8px; max-height: 42vh; overflow-y: auto; }
+.pfRow { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px; border: 1px solid var(--paper-2); border-radius: 4px; background: #f7f0e2; }
+.pfRow.order { grid-template-columns: minmax(0, 1fr) auto; }
+.pfRow img, .pfIcon { width: 56px; height: 56px; object-fit: cover; border-radius: 2px; background: var(--paper-2); }
+.pfIcon { display: grid; place-items: center; font: 700 14px var(--display); color: var(--muted-on-paper); }
+.pfRowMain { display: grid; gap: 2px; min-width: 0; }
+.pfRowMain b { font-size: 14px; overflow-wrap: anywhere; }
+.pfRowMain span { font-size: 12px; color: var(--muted-on-paper); overflow-wrap: anywhere; }
+.pfRowMain .sel { user-select: text; -webkit-user-select: text; color: var(--text-on-paper); }
+.pfStatus { font-weight: 700; }
+.pfStatus.s-accepted { color: #2f6b4f !important; } .pfStatus.s-declined, .pfStatus.s-cancelled { color: #8a3a2c !important; }
+.pfBtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.small { padding: 6px 10px; font-size: 12px; }
+@media (max-width: 560px) { .pfRow { grid-template-columns: 48px minmax(0, 1fr); } .pfRow img, .pfIcon { width: 48px; height: 48px; } .pfRow .pfCheck, .pfRow > .btn { grid-column: 2; justify-self: start; } }
 #keypad .sheet { padding: 24px; width: min(320px, 100%); display: grid; gap: 14px; }
 #code { font-family: var(--display); font-size: 40px; letter-spacing: .5em; text-align: center; background: var(--ink-2); color: var(--paper); border-radius: 4px; padding: 10px 0 10px .5em; font-variant-numeric: tabular-nums; }
 #code.bad { animation: shake .35s; color: #f19a86; }
@@ -197,6 +240,8 @@ body.touch #help { bottom: auto; top: calc(70px + env(safe-area-inset-top, 0px))
   </div>
 </div>
 
+<script src="js/config.js"></script>
+<script src="js/backend.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -871,6 +916,7 @@ function buildColor(id) {
   return p;
 }
 
+const G = {};
 const BUILDERS = { '1F': build1F, '2F': build2F, '3F': build3F, escape: buildEscape, tiger: buildTiger, celadon: buildCeladon };
 const cache = {};
 let cur = null, curId = null, lastGallery = '1F', busy = false;
@@ -994,6 +1040,7 @@ function act(a) {
   if (a.type === 'art') openArt(a.id);
   else if (a.type === 'go') { if (a.to === '1F' && curId === 'escape' && escapeState.open) { const s = Math.round((performance.now() - escapeState.start) / 1000); toast(`탈출 성공! 걸린 시간 ${Math.floor(s / 60)}분 ${s % 60}초`); escapeState.open = false; delete cache.escape; } go(a.to); }
   else if (a.type === 'map') openMap();
+  else if (G.onAction && G.onAction(a)) return;
   else if (a.type === 'keypad') openKeypad();
   else if (a.type === 'roar') { if (cur.roarT <= 0) { cur.roarT = 1.2; toast('호랑이가 고개를 들어 당신을 내려다봅니다.'); } }
 }
@@ -1003,7 +1050,7 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 /* ---------------- panels ---------------- */
 function releaseLock() { if (document.pointerLockElement) document.exitPointerLock(); }
 function showPanel(id) { releaseLock(); panelOpen = true; for (const k in keys) keys[k] = false; $(id).hidden = false; const f = $(id).querySelector('button'); if (f) setTimeout(() => f.focus(), 30); }
-function closePanels() { ['artPanel', 'mapPanel', 'keypad', 'intro'].forEach(i => { if (i !== 'intro' || started) $(i).hidden = true; }); panelOpen = !started; }
+function closePanels() { ['artPanel', 'mapPanel', 'keypad', 'intro'].forEach(i => { if (i !== 'intro' || started) $(i).hidden = true; }); document.querySelectorAll('.veil.pf').forEach(v => { v.hidden = true; }); panelOpen = !started; }
 let artOpen = null;
 function openArt(id) {
   const a = ARTS[id]; artOpen = id;
@@ -1011,7 +1058,7 @@ function openArt(id) {
   $('artTitle').textContent = a.title; $('artArtist').textContent = a.artist; $('artMedium').textContent = a.medium; $('artYear').textContent = a.year;
   $('artDesc').textContent = a.desc; $('artSale').textContent = a.sale;
   $('artEyebrow').textContent = a.world ? '작품 정보 · 들어갈 수 있는 작품' : '작품 정보';
-  $('enterWorldBtn').hidden = !a.world; $('buyBtn').hidden = !a.sale;
+  $('enterWorldBtn').hidden = !a.world; $('buyBtn').hidden = !a.sale; $('buyBtn').disabled = true; $('buyBtn').textContent = '구매하기 (준비 중)'; $('buyBtn').onclick = null;
   showPanel('artPanel');
 }
 $('enterWorldBtn').addEventListener('click', () => { const a = ARTS[artOpen]; if (a && a.world) go(a.world); });
@@ -1023,15 +1070,15 @@ const PLACES = [
   { id: '1F', fl: '1F', name: '기획전 「작품 속으로」', sub: '호랑이와 청자, 들어갈 수 있는 두 작품' },
   { id: '2F', fl: '2F', name: '작가 개인전 · 샘플 작가 A', sub: '색으로 자동 생성되는 공간 실험' },
   { id: '3F', fl: '3F', name: '입점 작가 모집', sub: '비어 있는 전시실' },
-  { id: 'escape', fl: '常', name: '상설관 · 방탈출 「세 그림의 수」', sub: '그림 속 단서로 문을 여는 게임' },
-  { id: null, fl: '我', name: '내 갤러리 만들기', sub: '다음 단계에서 만들 예정입니다' }
+  { id: 'escape', fl: '常', name: '상설관 · 방탈출 「세 그림의 수」', sub: '그림 속 단서로 문을 여는 게임' }
 ];
 function openMap() {
   const box = $('places'); box.innerHTML = '';
-  for (const pl of PLACES) {
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  for (const pl of PLACES.concat(G.extraPlaces ? G.extraPlaces() : [])) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'placeBtn' + (pl.id === curId ? ' here' : ''); b.disabled = !pl.id;
-    b.innerHTML = `<div class="fl">${pl.fl}</div><div><b>${pl.name}${pl.id === curId ? ' · 현재 위치' : ''}</b><span>${pl.sub}</span></div>`;
-    if (pl.id) b.addEventListener('click', () => go(pl.id));
+    b.innerHTML = `<div class="fl">${pl.fl}</div><div><b>${esc(pl.name)}${pl.id === curId ? ' · 현재 위치' : ''}</b><span>${esc(pl.sub)}</span></div>`;
+    if (pl.id) b.addEventListener('click', () => pl.run ? pl.run() : go(pl.id));
     box.appendChild(b);
   }
   showPanel('mapPanel');
@@ -1102,11 +1149,13 @@ Promise.race([fontLoads.catch(() => {}), new Promise(r => setTimeout(r, 3000))])
   go('1F', true); $('fade').classList.remove('on');
 });
 // show the hall behind the intro card
-window.__gallery = { go, openArt, act, player };
+Object.assign(G, { go, openArt, act, player, cache, BUILDERS, buildRoom, wallText, textTexture, mapPanelMesh, showPanel, closePanels, toast, isStarted: () => started, getCurId: () => curId });
+window.__gallery = G;
 frame();
 updateHelp();
 })();
 </script>
 
+<script src="js/platform.js"></script>
 </body>
 </html>
