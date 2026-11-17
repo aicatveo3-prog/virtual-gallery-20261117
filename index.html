@@ -51,6 +51,7 @@ body { background: var(--ink); color: var(--paper); font-family: var(--body); ov
 #hint { position: fixed; left: 50%; top: calc(50% + 22px); transform: translateX(-50%); z-index: 4; pointer-events: none; font-size: 13px; background: rgba(21,19,15,.72); border: 1px solid var(--line); padding: 6px 10px; border-radius: 4px; white-space: nowrap; }
 #help { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 4; font-size: 12px; color: var(--paper-2); background: rgba(21,19,15,.55); padding: 6px 12px; border-radius: 4px; pointer-events: none; text-align: center; max-width: calc(100% - 32px); }
 body.touch #help { bottom: auto; top: calc(116px + env(safe-area-inset-top, 0px)); }
+#zoomTag { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 5; font: 12px var(--body); color: var(--paper); background: rgba(21,19,15,.7); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
 #help kbd { font-family: var(--body); font-size: 11px; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 
 #fade { position: fixed; inset: 0; background: var(--ink); opacity: 0; pointer-events: none; transition: opacity .45s ease; z-index: 8; }
@@ -195,6 +196,7 @@ body.touch #pfPlaceBar { top: calc(160px + env(safe-area-inset-top, 0px)); }
 <div id="cross"></div>
 <div id="hint" hidden></div>
 <div id="help"></div>
+<button type="button" id="zoomTag" hidden></button>
 <div id="worldTitle"><b id="wtMain"></b><span id="wtSub"></span></div>
 <div id="toast" hidden></div>
 <div id="joy" hidden><div id="joyKnob"></div></div>
@@ -507,8 +509,11 @@ let envTex = null;
 try { const pm = new THREE.PMREMGenerator(renderer); envTex = pm.fromScene(new THREE.RoomEnvironment(), 0.04).texture; } catch (e) { envTex = null; }
 $('stage').appendChild(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 600);
+let baseFov = 70, zoom = 1;
+function applyZoom() { camera.fov = baseFov / zoom; camera.updateProjectionMatrix(); const z = document.getElementById('zoomTag'); if (z) { z.hidden = zoom < 1.05; z.textContent = '확대 ' + zoom.toFixed(1) + '배 · 눌러서 원래대로'; } }
+function setZoom(v) { zoom = Math.max(1, Math.min(3.5, v)); applyZoom(); }
 camera.rotation.order = 'YXZ';
-function resize() { const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w < h ? 85 : 70; camera.updateProjectionMatrix();
+function resize() { const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h); camera.aspect = w / h; baseFov = w < h ? 85 : 70; applyZoom();
 }
 window.addEventListener('resize', resize); resize();
 function shadowAll(obj, cast, receive) { obj.traverse(o => { if (o.isMesh) { o.castShadow = cast; o.receiveShadow = receive; } }); }
@@ -947,7 +952,7 @@ function go(id, instant) {
   $('fade').classList.add('on');
   setTimeout(() => {
     cur = getPlace(id); curId = id;
-    const sp = cur.spawn; player.pos.set(sp.pos[0], player.eye, sp.pos[2]); player.yaw = sp.yaw; player.pitch = 0; player.vy = 0;
+    const sp = cur.spawn; player.pos.set(sp.pos[0], player.eye, sp.pos[2]); player.yaw = sp.yaw; player.pitch = 0; player.vy = 0; walkTo = null; setZoom(1);
     $('placeSub').textContent = cur.name[0]; $('placeName').textContent = cur.name[1];
     const isWorld = !!cur.title; $('backBtn').hidden = !isWorld;
     if (!isWorld) lastGallery = id;
@@ -965,20 +970,20 @@ let locked = false, panelOpen = false, started = false;
 function updateHelp() {
   const fly = cur && cur.fly;
   $('help').innerHTML = isTouch
-    ? '왼쪽 아래 원을 끌어 이동 · 화면 오른쪽을 끌어 둘러보기 · 작품을 톡 눌러 보기'
-    : (locked ? '<kbd>W A S D</kbd> 이동 · 마우스로 둘러보기 · <kbd>클릭</kbd> 또는 <kbd>E</kbd> 작품 보기 · <kbd>Shift</kbd> 빨리 걷기' + (fly ? ' · <kbd>Space</kbd> 위로 <kbd>Q</kbd> 아래로' : '') + ' · <kbd>Esc</kbd> 마우스 풀기'
-              : '화면을 클릭하면 마우스로 둘러볼 수 있습니다 · 끌어서 둘러보기도 됩니다 · <kbd>W A S D</kbd> 이동');
+    ? '바닥을 톡: 그곳으로 걷기 · 왼쪽 아래 원: 이동 · 끌기: 둘러보기 · 두 손가락 벌리기: 확대 · 작품 톡: 보기'
+    : '<kbd>↑ ↓</kbd> 앞뒤로 걷기 · <kbd>← →</kbd> 돌아보기 · 끌기: 둘러보기 · 휠: 확대/축소 · <kbd>클릭</kbd>: 작품 보기' + (fly ? ' · <kbd>Space</kbd> 위로 <kbd>Q</kbd> 아래로' : '');
 }
 $('introKeys').innerHTML = isTouch
-  ? '<div><b>이동</b> 왼쪽 아래 원을 끌기</div><div><b>둘러보기</b> 화면 오른쪽을 끌기</div><div><b>작품 보기</b> 작품을 톡 누르기</div>'
-  : '<div><b>이동</b> W A S D 또는 방향키</div><div><b>둘러보기</b> 화면 클릭 후 마우스</div><div><b>작품 보기</b> 클릭 또는 E</div><div><b>떠오르기</b> 청자 공간에서 Space, Q</div>';
+  ? '<div><b>걷기</b> 가고 싶은 바닥을 톡 (또는 왼쪽 아래 원을 끌기)</div><div><b>둘러보기</b> 화면을 끌기</div><div><b>확대</b> 두 손가락으로 벌리기</div><div><b>작품 보기</b> 작품을 톡</div>'
+  : '<div><b>걷기</b> ↑ ↓ (또는 W S)</div><div><b>돌아보기</b> ← → 또는 화면을 끌기</div><div><b>옆걸음</b> A D</div><div><b>확대 · 축소</b> 마우스 휠 위 · 아래</div><div><b>작품 보기</b> 작품을 클릭</div><div><b>떠오르기</b> 청자 공간에서 Space, Q</div>';
 
 window.addEventListener('keydown', e => {
   if (panelOpen) { if (e.key === 'Escape') closePanels(); if ($('keypad').hidden === false) keypadKey(e.key); return; }
   keys[e.code] = true;
   if (e.code === 'KeyE' && hovered) act(hovered.userData.action);
   if (e.code === 'KeyM') openMap();
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+  if (e.code === 'Digit0' || e.code === 'Numpad0') setZoom(1);
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -1001,13 +1006,25 @@ window.addEventListener('mouseup', e => {
   if (locked) { if (hovered) act(hovered.userData.action); return; }
   const hit = pick(ndcUp);
   if (hit) { act(hit.userData.action); return; }
-  try { const r = el.requestPointerLock && el.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) { /* pointer lock unavailable: drag-to-look still works */ }
 });
+// 마우스 휠: 위로 굴리면 확대, 아래로 굴리면 축소
+el.addEventListener('wheel', e => {
+  if (!started || panelOpen) return; e.preventDefault();
+  setZoom(zoom * Math.exp(-e.deltaY * (e.deltaMode === 1 ? .05 : .0015)));
+}, { passive: false });
 const mouseNDC = new THREE.Vector2(0, 0);
-function look(dx, dy) { player.yaw -= dx * .0024; player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch - dy * .0024)); }
+function look(dx, dy) { const k = .0024 / zoom; player.yaw -= dx * k; player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch - dy * k)); }
 
 // touch
-const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 }, lookT = { id: null, x: 0, y: 0, sx: 0, sy: 0, t: 0 };
+const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 }, lookT = { id: null, x: 0, y: 0, sx: 0, sy: 0, t: 0 }, pinch = { id: null, d0: 0, z0: 1 };
+let walkTo = null;
+const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+function floorPoint(ndc) {
+  ray.setFromCamera(ndc, camera); const pt = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(floorPlane, pt)) return null;
+  const dist = Math.hypot(pt.x - player.pos.x, pt.z - player.pos.z);
+  return dist > .6 && dist < 30 ? pt : null;
+}
 let flyDir = 0;
 if (isTouch) {
   document.body.classList.add('touch');
@@ -1015,27 +1032,33 @@ if (isTouch) {
   el.addEventListener('touchstart', e => {
     if (!started || panelOpen) return;
     for (const t of e.changedTouches) {
-      if (t.clientX < innerWidth * .4 && joy.id === null) { joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY; joy.x = joy.y = 0; }
+      const r = $('joy').getBoundingClientRect();
+      if (joy.id === null && t.clientX < r.right + 40 && t.clientY > r.top - 40) { joy.id = t.identifier; joy.ox = t.clientX; joy.oy = t.clientY; joy.x = joy.y = 0; walkTo = null; }
       else if (lookT.id === null) { lookT.id = t.identifier; lookT.x = lookT.sx = t.clientX; lookT.y = lookT.sy = t.clientY; lookT.t = performance.now(); }
+      else if (pinch.id === null) { pinch.id = t.identifier; pinch.x = t.clientX; pinch.y = t.clientY; pinch.d0 = Math.hypot(t.clientX - lookT.x, t.clientY - lookT.y) || 1; pinch.z0 = zoom; lookT.t = 0; }
     }
     e.preventDefault();
   }, { passive: false });
   el.addEventListener('touchmove', e => {
     for (const t of e.changedTouches) {
       if (t.identifier === joy.id) { joy.x = Math.max(-1, Math.min(1, (t.clientX - joy.ox) / 50)); joy.y = Math.max(-1, Math.min(1, (t.clientY - joy.oy) / 50)); $('joyKnob').style.transform = `translate(${joy.x * 35}px, ${joy.y * 35}px)`; }
-      else if (t.identifier === lookT.id) { look(-(t.clientX - lookT.x) * 2.2, -(t.clientY - lookT.y) * 2.2); lookT.x = t.clientX; lookT.y = t.clientY; }
+      else if (t.identifier === lookT.id) { if (pinch.id === null) look(-(t.clientX - lookT.x) * 2.2, -(t.clientY - lookT.y) * 2.2); lookT.x = t.clientX; lookT.y = t.clientY; }
+      else if (t.identifier === pinch.id) { pinch.x = t.clientX; pinch.y = t.clientY; }
     }
+    if (pinch.id !== null && lookT.id !== null) setZoom(pinch.z0 * Math.hypot(pinch.x - lookT.x, pinch.y - lookT.y) / pinch.d0);
     e.preventDefault();
   }, { passive: false });
   const end = e => {
     for (const t of e.changedTouches) {
       if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; $('joyKnob').style.transform = ''; }
+      else if (t.identifier === pinch.id) { pinch.id = null; }
       else if (t.identifier === lookT.id) {
-        lookT.id = null;
+        lookT.id = null; if (pinch.id !== null) { pinch.id = null; continue; }
         if (Math.hypot(t.clientX - lookT.sx, t.clientY - lookT.sy) < 10 && performance.now() - lookT.t < 350) {
           const tn = new THREE.Vector2(t.clientX / innerWidth * 2 - 1, -(t.clientY / innerHeight) * 2 + 1);
           if (G.onPointerPick && G.onPointerPick(tn)) continue;
-          const hit = pick(tn); if (hit) act(hit.userData.action);
+          const hit = pick(tn); if (hit) { act(hit.userData.action); continue; }
+          const fp = floorPoint(tn); if (fp) { walkTo = fp; walkTo.stuck = 0; }
         }
       }
     }
@@ -1103,6 +1126,7 @@ function openMap() {
 }
 $('mapBtn').addEventListener('click', () => { if (started) openMap(); });
 $('backBtn').addEventListener('click', () => go(cur && cur.title && curId.startsWith('color:') ? '2F' : lastGallery));
+$('zoomTag').addEventListener('click', () => setZoom(1));
 $('helpBtn').addEventListener('click', () => { started = false; $('intro').hidden = false; panelOpen = true; releaseLock(); $('enterBtn').textContent = '계속 둘러보기'; });
 
 // keypad
@@ -1137,13 +1161,20 @@ function frame() {
   if (started && !panelOpen) {
     let mx = 0, mz = 0;
     if (keys.KeyW || keys.ArrowUp) mz += 1; if (keys.KeyS || keys.ArrowDown) mz -= 1;
-    if (keys.KeyD || keys.ArrowRight) mx += 1; if (keys.KeyA || keys.ArrowLeft) mx -= 1;
+    if (keys.KeyD) mx += 1; if (keys.KeyA) mx -= 1;
     if (joy.id !== null) { mx += joy.x; mz -= joy.y; }
+    if (keys.ArrowLeft) player.yaw += 1.9 * dt; if (keys.ArrowRight) player.yaw -= 1.9 * dt;
+    if (mx || mz) walkTo = null;
     const big = !!cur.title, speed = (keys.ShiftLeft || keys.ShiftRight ? 2 : 1) * (big ? 7 : 3.6);
     fwd.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)); rgt.set(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
     const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
     player.pos.addScaledVector(fwd, mz * speed * dt).addScaledVector(rgt, mx * speed * dt);
     if (cur.fly) { const v = (keys.Space ? 1 : 0) - (keys.KeyQ || keys.KeyC ? 1 : 0) + flyDir; player.pos.y += v * 6 * dt; }
+    if (walkTo) {
+      const dx = walkTo.x - player.pos.x, dz = walkTo.z - player.pos.z, dist = Math.hypot(dx, dz);
+      if (dist < .35) walkTo = null;
+      else { const st = Math.min(dist, speed * dt), bx = player.pos.x, bz = player.pos.z; player.pos.x += dx / dist * st; player.pos.z += dz / dist * st; cur.clamp(player.pos); if (Math.hypot(player.pos.x - bx, player.pos.z - bz) < st * .3 && ++walkTo.stuck > 8) walkTo = null; }
+    }
     cur.clamp(player.pos);
   }
   camera.position.copy(player.pos);
@@ -1155,7 +1186,7 @@ function frame() {
   if (started && !panelOpen && !isTouch) hovered = pick(locked ? new THREE.Vector2(0, 0) : mouseNDC);
   const hint = $('hint');
   if (hovered && locked) { hint.hidden = false; hint.textContent = (hovered.userData.action.label || '보기') + ' · 클릭'; $('cross').classList.add('on'); }
-  else if (hovered) { hint.hidden = true; el.style.cursor = 'pointer'; $('cross').classList.remove('on'); }
+  else if (hovered) { hint.hidden = false; hint.textContent = (hovered.userData.action.label || '보기') + ' · 클릭'; el.style.cursor = 'pointer'; $('cross').classList.remove('on'); }
   else { hint.hidden = true; el.style.cursor = locked ? 'none' : 'grab'; $('cross').classList.remove('on'); }
   $('cross').hidden = !locked;
   renderer.render(cur.scene, camera);
